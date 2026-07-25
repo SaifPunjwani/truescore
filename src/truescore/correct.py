@@ -34,6 +34,7 @@ References:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -97,7 +98,7 @@ def _z(alpha: float) -> float:
     return float(stats.norm.ppf(1.0 - alpha / 2.0))
 
 
-def _is_binary(values: np.ndarray) -> bool:
+def _is_binary(values: npt.NDArray[Any]) -> bool:
     return bool(np.all(np.isin(np.unique(values), (0, 1))))
 
 
@@ -185,7 +186,9 @@ def gold_only_estimate(gold: npt.ArrayLike, *, alpha: float = 0.05, n_total: int
 
 
 def _optimal_lambda(
-    gold_values: np.ndarray, judge_labeled: np.ndarray, judge_unlabeled: np.ndarray
+    gold_values: npt.NDArray[Any],
+    judge_labeled: npt.NDArray[Any],
+    judge_unlabeled: npt.NDArray[Any],
 ) -> float:
     """Variance-minimizing PPI++ tuning parameter, clipped to [0, 1].
 

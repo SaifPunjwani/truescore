@@ -7,6 +7,8 @@ a silent NaN in an evaluation report is worse than a crash.
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import numpy.typing as npt
 
@@ -19,7 +21,7 @@ __all__ = [
 ]
 
 
-def to_1d_array(name: str, values: npt.ArrayLike) -> np.ndarray:
+def to_1d_array(name: str, values: npt.ArrayLike) -> npt.NDArray[Any]:
     """Return ``values`` as a 1-D array, raising ``ValueError`` if it is not 1-D."""
     arr = np.asarray(values)
     if arr.ndim != 1:
@@ -29,7 +31,7 @@ def to_1d_array(name: str, values: npt.ArrayLike) -> np.ndarray:
     return arr
 
 
-def check_binary(name: str, values: npt.ArrayLike) -> np.ndarray:
+def check_binary(name: str, values: npt.ArrayLike) -> npt.NDArray[Any]:
     """Return ``values`` as a 1-D array of 0/1 integers.
 
     Accepts booleans and integer arrays holding only 0 and 1. Anything else raises,
@@ -49,7 +51,7 @@ def check_binary(name: str, values: npt.ArrayLike) -> np.ndarray:
     return arr.astype(np.int64)
 
 
-def check_same_length(name_a: str, a: np.ndarray, name_b: str, b: np.ndarray) -> None:
+def check_same_length(name_a: str, a: npt.NDArray[Any], name_b: str, b: npt.NDArray[Any]) -> None:
     """Raise ``ValueError`` unless ``a`` and ``b`` have the same length."""
     if a.shape[0] != b.shape[0]:
         raise ValueError(
@@ -57,7 +59,7 @@ def check_same_length(name_a: str, a: np.ndarray, name_b: str, b: np.ndarray) ->
         )
 
 
-def check_gold_index(gold_index: npt.ArrayLike, n_total: int) -> np.ndarray:
+def check_gold_index(gold_index: npt.ArrayLike, n_total: int) -> npt.NDArray[Any]:
     """Validate an index array selecting the gold-labeled subset of ``n_total`` examples.
 
     Raises:

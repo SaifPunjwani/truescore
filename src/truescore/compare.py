@@ -23,6 +23,7 @@ References:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -326,7 +327,7 @@ def ppi_compare(
     )
 
 
-def holm(p_values: npt.ArrayLike) -> np.ndarray:
+def holm(p_values: npt.ArrayLike) -> npt.NDArray[Any]:
     """Holm step-down adjusted p-values, controlling the family-wise error rate.
 
     Use when comparing several systems or several slices at once: at ten independent
@@ -355,7 +356,7 @@ def holm(p_values: npt.ArrayLike) -> np.ndarray:
     return adjusted
 
 
-def benjamini_hochberg(p_values: npt.ArrayLike) -> np.ndarray:
+def benjamini_hochberg(p_values: npt.ArrayLike) -> npt.NDArray[Any]:
     """Benjamini-Hochberg adjusted p-values, controlling the false discovery rate.
 
     Less conservative than :func:`holm`; appropriate when you are screening many slices

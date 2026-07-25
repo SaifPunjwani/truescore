@@ -25,7 +25,7 @@ References:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 import numpy.typing as npt
@@ -118,7 +118,7 @@ def wilson_interval(successes: int, n: int, *, alpha: float = 0.05) -> Interval:
     )
 
 
-def _confusion_counts(judge: np.ndarray, gold: np.ndarray) -> tuple[int, int, int, int]:
+def _confusion_counts(judge: npt.NDArray[Any], gold: npt.NDArray[Any]) -> tuple[int, int, int, int]:
     """Return (true positives, false positives, false negatives, true negatives)."""
     tp = int(np.sum((judge == 1) & (gold == 1)))
     fp = int(np.sum((judge == 1) & (gold == 0)))
@@ -202,15 +202,17 @@ def gwet_ac1(a: npt.ArrayLike, b: npt.ArrayLike) -> float:
 
 
 def _delta_squared(
-    categories: np.ndarray, counts: np.ndarray, level: Literal["nominal", "ordinal", "interval"]
-) -> np.ndarray:
+    categories: npt.NDArray[Any],
+    counts: npt.NDArray[Any],
+    level: Literal["nominal", "ordinal", "interval"],
+) -> npt.NDArray[Any]:
     """Squared difference matrix between categories for Krippendorff's α."""
     k = categories.size
     if level == "nominal":
         return 1.0 - np.eye(k)
     if level == "interval":
         diff = categories.astype(float)[:, None] - categories.astype(float)[None, :]
-        squared: np.ndarray = diff**2
+        squared: npt.NDArray[Any] = diff**2
         return squared
     # Ordinal: the metric depends on the observed marginal counts between the two ranks.
     cum = np.cumsum(counts)
@@ -294,7 +296,7 @@ def krippendorff_alpha(
 
 
 def _bootstrap_interval(
-    statistic_values: np.ndarray, point: float, alpha: float, method: str
+    statistic_values: npt.NDArray[Any], point: float, alpha: float, method: str
 ) -> Interval:
     """Percentile bootstrap interval from resampled statistic values."""
     low, high = np.percentile(statistic_values, [100 * alpha / 2, 100 * (1 - alpha / 2)])

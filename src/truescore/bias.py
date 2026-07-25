@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -102,7 +103,9 @@ class BiasReport:
         return "\n".join(lines)
 
 
-def _hc3_regression(design: np.ndarray, response: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def _hc3_regression(
+    design: npt.NDArray[Any], response: npt.NDArray[Any]
+) -> tuple[np.ndarray, npt.NDArray[Any]]:
     """OLS with HC3 robust standard errors.
 
     Returns ``(coefficients, standard_errors)``. HC3 weights each squared residual by
