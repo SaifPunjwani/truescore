@@ -161,7 +161,7 @@ def cohen_kappa(a: npt.ArrayLike, b: npt.ArrayLike) -> float:
         # meaningful reading.
         return 1.0 if np.isclose(p_o, 1.0) else 0.0
     del n
-    return (p_o - p_e) / (1.0 - p_e)
+    return float((p_o - p_e) / (1.0 - p_e))
 
 
 def gwet_ac1(a: npt.ArrayLike, b: npt.ArrayLike) -> float:
@@ -198,7 +198,7 @@ def gwet_ac1(a: npt.ArrayLike, b: npt.ArrayLike) -> float:
     p_e /= k - 1
     if np.isclose(p_e, 1.0):
         return 1.0 if np.isclose(p_o, 1.0) else 0.0
-    return (p_o - p_e) / (1.0 - p_e)
+    return float((p_o - p_e) / (1.0 - p_e))
 
 
 def _delta_squared(

@@ -105,7 +105,7 @@ class BiasReport:
 
 def _hc3_regression(
     design: npt.NDArray[Any], response: npt.NDArray[Any]
-) -> tuple[np.ndarray, npt.NDArray[Any]]:
+) -> tuple[npt.NDArray[Any], npt.NDArray[Any]]:
     """OLS with HC3 robust standard errors.
 
     Returns ``(coefficients, standard_errors)``. HC3 weights each squared residual by
