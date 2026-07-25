@@ -1,0 +1,59 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "truescore"
+version = "0.1.0"
+description = "Statistically valid evaluation for LLM-judged benchmarks: bias-corrected scores, honest intervals, defensible comparisons"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [{ name = "Saif Punjwani", email = "saifpunjwani1230@gmail.com" }]
+keywords = [
+    "evaluation",
+    "llm",
+    "llm-as-judge",
+    "statistics",
+    "prediction-powered-inference",
+    "confidence-intervals",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Private :: Do Not Upload",
+    "Typing :: Typed",
+]
+dependencies = ["numpy>=1.24", "scipy>=1.10"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-xdist>=3.5",
+    "hypothesis>=6.100",
+    "ruff>=0.6",
+    "mypy>=1.10",
+    "scipy-stubs>=1.15",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/truescore"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "RUF"]
+allowed-confusables = ["−", "α", "β", "λ", "θ", "κ", "π", "σ", "ρ", "δ", "·"]
+
+[tool.mypy]
+strict = true
+files = ["src/truescore"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
