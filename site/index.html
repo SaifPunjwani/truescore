@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>truescore — statistics for LLM-judged evaluations</title>
+<meta name="description" content="Your LLM judge is wrong in ways you haven't measured. truescore corrects the score, puts real confidence intervals on it, and tells you which segment actually regressed.">
+<meta property="og:title" content="truescore">
+<meta property="og:description" content="Your LLM judge is wrong in ways you haven't measured. truescore corrects the score and puts real intervals on it.">
+<meta property="og:type" content="website">
+<style>
+  :root {
+    --ink: #14171a;
+    --muted: #5b636b;
+    --line: #e3e6e8;
+    --bg: #ffffff;
+    --code-bg: #f6f7f8;
+    --accent: #0b5fff;
+    --bad: #b42318;
+    --good: #067647;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #e6e8ea; --muted: #9aa2aa; --line: #2a2f34; --bg: #101315;
+      --code-bg: #181c1f; --accent: #6ea8ff; --bad: #f97066; --good: #47cd89;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.65 ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 0 24px; }
+  header { padding: 72px 0 40px; }
+  h1 { font-size: 40px; line-height: 1.15; margin: 0 0 12px; letter-spacing: -0.02em; }
+  h1 .dim { color: var(--muted); font-weight: 400; }
+  .tagline { font-size: 20px; color: var(--muted); margin: 0 0 28px; max-width: 34em; }
+  h2 { font-size: 22px; margin: 48px 0 14px; letter-spacing: -0.01em; }
+  h3 { font-size: 16px; margin: 28px 0 8px; }
+  p { margin: 0 0 16px; }
+  a { color: var(--accent); }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto; font-size: 13.5px; line-height: 1.55; margin: 0 0 18px;
+  }
+  code { font-size: 0.92em; }
+  p code, li code, td code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+  .cta { display: flex; gap: 10px; flex-wrap: wrap; margin: 24px 0 0; }
+  .btn {
+    display: inline-block; padding: 9px 16px; border-radius: 7px; text-decoration: none;
+    border: 1px solid var(--line); color: var(--ink); font-size: 14.5px;
+  }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  table { border-collapse: collapse; width: 100%; margin: 0 0 18px; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+  th { font-weight: 600; color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; }
+  td.num { font-family: ui-monospace, monospace; }
+  .bad { color: var(--bad); font-weight: 600; }
+  .good { color: var(--good); font-weight: 600; }
+  .note { color: var(--muted); font-size: 14.5px; }
+  footer { margin: 72px 0 56px; padding-top: 24px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+  .badges { margin: 0 0 8px; }
+  .badges img { height: 20px; margin-right: 6px; vertical-align: middle; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="badges">
+    <a href="https://pypi.org/project/truescore/"><img alt="PyPI" src="https://img.shields.io/pypi/v/truescore"></a>
+    <a href="https://github.com/SaifPunjwani/truescore/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/SaifPunjwani/truescore/actions/workflows/ci.yml/badge.svg"></a>
+    <a href="https://github.com/SaifPunjwani/truescore/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
+  </div>
+  <h1>truescore <span class="dim">— your judge is wrong, by a measurable amount</span></h1>
+  <p class="tagline">Statistics for LLM-judged evaluations: bias-corrected scores, real
+  confidence intervals, and comparisons that hold up.</p>
+  <pre>pip install truescore
+truescore doctor your_eval_results.csv</pre>
+  <div class="cta">
+    <a class="btn primary" href="https://github.com/SaifPunjwani/truescore">GitHub</a>
+    <a class="btn" href="https://pypi.org/project/truescore/">PyPI</a>
+    <a class="btn" href="https://github.com/SaifPunjwani/truescore/tree/main/docs/methods">Methods</a>
+  </div>
+</header>
+
+<h2>The number on your dashboard</h2>
+
+<p>A support assistant, 4000 questions graded by an LLM judge, 600 of them also graded by a
+person. The data is simulated, so the real pass rate is known: <code>0.7140</code>.</p>
+
+<table>
+  <tr><th>estimate</th><th>value</th><th>95% interval</th><th>contains the truth?</th></tr>
+  <tr><td>judge only</td><td class="num">0.8383</td><td class="num">[0.8265, 0.8493]</td><td class="bad">no</td></tr>
+  <tr><td>corrected</td><td class="num">0.7150</td><td class="num">[0.6836, 0.7463]</td><td class="good">yes</td></tr>
+  <tr><td>human labels only</td><td class="num">0.7183</td><td class="num">[0.6810, 0.7528]</td><td class="good">yes, but wider</td></tr>
+</table>
+
+<p>The judge is 12 points high and its interval doesn't reach the true value. The corrected
+estimate does, and it's tighter than using the 600 human labels alone.</p>
+
+<h2>Comparisons are worse</h2>
+
+<table>
+  <tr><th></th><th>v4 minus v3</th></tr>
+  <tr><td>judge says</td><td class="num">+0.1700</td></tr>
+  <tr><td>corrected</td><td class="num">+0.0950 [+0.0505, +0.1394]</td></tr>
+  <tr><td>actual</td><td class="num">+0.0900</td></tr>
+</table>
+
+<p>v4 really is better. But 7 of those 17 points come from the judge preferring longer
+answers, and v4's median answer is 197 tokens against v3's 99. Measured length bias:
+<code>+0.069</code> per 100 tokens, p = 1e-05.</p>
+
+<p>Slice the same data by support segment and the judge says all three improved. One
+regressed by 17 points, the one where answers got longest. Per-segment correction returns
+<code>-0.1659</code> against a planted truth of <code>-0.1663</code>.</p>
+
+<h2>Watching a dashboard doesn't help</h2>
+
+<p>A 95% interval is valid at one sample size you fixed in advance. Check it repeatedly as
+data arrives and it isn't 95% anymore. Over 300 simulated healthy streams:</p>
+
+<table>
+  <tr><th>checked after every observation</th><th>false alarms</th></tr>
+  <tr><td>fixed-sample interval</td><td class="bad">47.7%</td></tr>
+  <tr><td>truescore confidence sequence</td><td class="good">0.3%</td></tr>
+</table>
+
+<h2>Start here</h2>
+
+<p><code>doctor</code> reads your file, works out what your columns are, and tells you what
+it can compute and what's blocked:</p>
+
+<pre>$ truescore doctor results.csv
+
+results.csv: 4000 rows, 5 columns
+
+  column                  kind                coverage  detail
+  judge_passed            verdict                 100%  pass/fail on every row
+  human_passed            sparse_verdict           15%  pass/fail on 600 of 4000 rows
+  response_tokens         numeric                 100%  range 35 to 1016
+
+what this file supports today:
+  - correct the score for judge error
+  - monitor a release for regressions, no human labels needed
+
+what the judge appears to be biased by:
+  - response_tokens: the judge gets more generous as it rises
+    (+0.00069 per unit, adjusted p=2.23e-05)</pre>
+
+<h2>In CI</h2>
+
+<pre>- uses: SaifPunjwani/truescore@v0.5.0
+  with:
+    command: drift
+    args: anchor.csv --baseline judge_pinned --current judge_today --gold human</pre>
+
+<p>Exit codes are 0 for nothing found, 2 for a finding, 1 for couldn't run. A job can fail
+on judge drift without also failing on a bad filename.</p>
+
+<h2>How many human labels does this need?</h2>
+
+<p>Some, for the correction. You can't calibrate an instrument without something to
+calibrate it against.</p>
+
+<p>About half the library needs none: regression monitoring, contamination testing,
+position-bias detection and label planning all run on judge output alone. For the rest it's
+a few hundred labels, you label once and reuse across releases, and you may already have
+human verdicts in your database (escalations, thumbs-down, refunds, repeat contacts).</p>
+
+<p>The library prices it before you spend anything:</p>
+
+<pre>  +/-0.05:   232 labels (without the judge:   317)
+  +/-0.03:   670 labels (without the judge:   879)
+  +/-0.02:  1644 labels (without the judge:  1978)</pre>
+
+<h2>Why trust it</h2>
+
+<p>Every interval estimator has a coverage test: simulate from a known truth hundreds of
+times and check the 95% interval covers about 95% of the time. The confidence sequence is
+checked over whole trajectories.</p>
+
+<p>The suite also fuzzes every public function and requires that nothing ever returns a
+NaN. Any input gives a finite result or raises. That found three real bugs before release,
+including a near-deterministic slice whose interval had 7.7% coverage.</p>
+
+<p class="note">602 tests. mypy --strict. numpy and scipy are the only dependencies. It
+never calls a model.</p>
+
+<footer>
+  Apache-2.0 &middot;
+  <a href="https://github.com/SaifPunjwani/truescore">source</a> &middot;
+  <a href="https://github.com/SaifPunjwani/truescore/issues">issues</a>
+</footer>
+
+</div>
+</body>
+</html>

@@ -8,7 +8,8 @@ version = "0.4.1"
 description = "Statistically valid evaluation for LLM-judged benchmarks: bias-corrected scores, honest intervals, defensible comparisons"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { file = "LICENSE" }
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 authors = [{ name = "Saif Punjwani", email = "saifpunjwani1230@gmail.com" }]
 keywords = [
     "evaluation",
@@ -24,10 +25,22 @@ classifiers = [
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
-    "Private :: Do Not Upload",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
     "Typing :: Typed",
 ]
 dependencies = ["numpy>=1.24", "scipy>=1.10"]
+
+[project.urls]
+Homepage = "https://saifpunjwani.github.io/truescore/"
+Documentation = "https://saifpunjwani.github.io/truescore/"
+Repository = "https://github.com/SaifPunjwani/truescore"
+Issues = "https://github.com/SaifPunjwani/truescore/issues"
+Changelog = "https://github.com/SaifPunjwani/truescore/blob/main/CHANGELOG.md"
 
 [project.scripts]
 truescore = "truescore.cli:main"

@@ -1,17 +1,25 @@
 # truescore
 
-Statistically valid evaluation for LLM-judged benchmarks: bias-corrected scores, honest
-intervals, and comparisons that survive scrutiny.
+Statistics for LLM-judged evaluations: bias-corrected scores, real confidence intervals,
+and comparisons that hold up.
 
-**Private and unreleased.** See `LICENSE` — all rights reserved pending a decision on
-commercial direction. Design and go-to-market notes are in
-[`docs/superpowers/specs/2026-07-25-truescore-design.md`](docs/superpowers/specs/2026-07-25-truescore-design.md).
+[![CI](https://github.com/SaifPunjwani/truescore/actions/workflows/ci.yml/badge.svg)](https://github.com/SaifPunjwani/truescore/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/truescore)](https://pypi.org/project/truescore/)
+[![Python](https://img.shields.io/pypi/pyversions/truescore)](https://pypi.org/project/truescore/)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-## The problem, in one table
+```sh
+pip install truescore
+truescore doctor your_eval_results.csv
+```
 
-A support assistant is evaluated on 4000 questions. An LLM judge scores every answer; a
-contractor hand-labeled 600 of them. Here is what the two versions of that number look
-like, from `examples/01_audit_an_eval.py`:
+## The problem
+
+You grade your model with an LLM judge. The judge is wrong in ways you haven't measured,
+so the number it gives you is wrong too.
+
+Here's a run from `examples/01_audit_an_eval.py`. A support assistant, 4000 questions
+graded by a judge, 600 of them also graded by a person:
 
 ```
 support-assistant-v4 -- pass rate
@@ -21,53 +29,79 @@ support-assistant-v4 -- pass rate
   n=4000 examples, 600 human-labeled
 ```
 
-The example data is simulated, so the truth is known: **0.7140**. The judge-only number is
-12 points too high and its interval does not contain the truth at all. The corrected
-estimate does — and is *tighter* than the 600 human labels alone, because prediction-powered
-inference takes the judge's precision without taking its bias.
+The data is simulated, so we know the real pass rate is 0.7140. The judge reports 0.8383.
+Its confidence interval doesn't contain the true value. The corrected estimate does, and
+it's narrower than using the 600 human labels on their own.
 
-It gets worse when you compare two systems. From `examples/02_compare_two_models.py`:
+Comparisons are worse. From `examples/02_compare_two_models.py`:
 
-| | improvement of v4 over v3 |
+| | v4 minus v3 |
 | --- | --- |
-| what the judge reports | **+0.1700** |
-| corrected for judge error | **+0.0950** `[+0.0505, +0.1394]` |
-| the truth | +0.0900 |
+| judge says | +0.1700 |
+| corrected | +0.0950 `[+0.0505, +0.1394]` |
+| actual | +0.0900 |
 
-v4 really is better, and worth shipping. But 7 of those 17 points are the judge rewarding
-v4 for writing longer answers — the median v4 answer is 197 tokens against v3's 99, and the
-judge's length bias measures at `+0.069` per 100 tokens (p = 1e-05). A launch review that
-believed the judge's number would be paying for verbosity, and would keep paying on every
-release after this one.
+v4 is genuinely better. But 7 of those 17 points come from the judge preferring longer
+answers, and v4's median answer is 197 tokens against v3's 99. Measured length bias:
++0.069 per 100 tokens, p = 1e-05.
 
-And the overall number is not the end of it. Split the same evaluation by support
-segment, and the judge reports an improvement on all three — while v4 has in fact
-regressed on one of them by 17 points, because that is the segment where its answers got
-longest. Correcting each segment separately recovers it (`-0.1659` against a planted truth
-of `-0.1663`) and flags it at an adjusted p of 2e-07.
+Slice the same data by support segment and the judge says all three improved. One of them
+regressed by 17 points. It's the segment where answers got longest. Per-segment correction
+gives -0.1659 where the planted truth was -0.1663.
 
-## And you cannot fix it by watching the dashboard
+## Watching a dashboard doesn't help
 
-A 95% confidence interval is valid at *one* pre-specified sample size. Checked repeatedly
-as data arrives, it is not valid at all. Measured over 300 simulated healthy streams:
+A 95% confidence interval is valid at one sample size you picked in advance. Check it
+repeatedly as data arrives and it isn't 95% anymore. Over 300 simulated healthy streams:
 
-| approach | false-alarm rate under continuous monitoring |
+| checked after every observation | false alarms |
 | --- | --- |
-| fixed-sample interval, checked every observation | **47.7%** |
-| truescore confidence sequence | 0.3% (budget: 5%) |
+| fixed-sample interval | 47.7% |
+| truescore confidence sequence | 0.3% |
 
-Nearly half of continuously-watched evals will show a regression that is not there.
-`truescore.sequential` gives intervals valid at every sample size simultaneously, so you
-can look whenever you like and act the moment they move.
+`truescore.sequential` gives intervals valid at every sample size at once, so you can
+check whenever you want.
 
-## Install and use
+## Usage
+
+Start with `doctor`. It reads your file, works out what your columns are, and tells you
+what it can compute:
 
 ```sh
-pip install -e '.[dev]'
-python examples/generate_sample_data.py   # writes the sample files used below
+truescore doctor results.csv
 ```
 
-As a library:
+```
+results.csv: 4000 rows, 5 columns
+
+  column                  kind                coverage  detail
+  judge_passed            verdict                 100%  pass/fail on every row
+  human_passed            sparse_verdict           15%  pass/fail on 600 of 4000 rows
+  response_tokens         numeric                 100%  range 35 to 1016
+
+what this file supports today:
+  - correct the score for judge error (truescore audit results.csv --judge judge_passed --gold human_passed)
+  - monitor a release for regressions, no human labels needed
+
+what the judge appears to be biased by:
+  - response_tokens: the judge gets more generous as it rises (+0.00069 per unit, adjusted p=2.23e-05)
+```
+
+The rest of the commands:
+
+```sh
+truescore audit   results.csv --judge judge_passed --gold human_passed --markdown report.md
+truescore compare results.csv --judge-a v4 --judge-b v3 --gold-a v4_human --gold-b v3_human
+truescore slices  results.csv --by segment --judge-a v4 --gold-a v4_human --judge-b v3 --gold-b v3_human
+truescore drift   anchor.csv  --baseline judge_may --current judge_june --gold human_passed
+truescore monitor stream.csv  --metric passed --baseline 0.88 --window 300
+truescore plan    --n-total 4000 --target 0.03 --sensitivity 0.97 --specificity 0.47
+```
+
+Exit codes: 0 means nothing found, 2 means a finding, 1 means it couldn't run. They're
+different so a CI job can fail on drift without also failing on a typo in a filename.
+
+From Python:
 
 ```python
 import truescore as ts
@@ -78,62 +112,36 @@ report = ts.build_report(labels.judge, labels.gold, labels.gold_index)
 print(report.summary())
 ```
 
-Start by pointing it at a file. It works out what your columns are, what it can compute
-today, what is blocked and by how many labels, and what your judge appears to be biased by:
-
-```sh
-truescore doctor results.csv
-```
-
-Then the analyses themselves, over the CSV or JSONL your harness already writes:
-
-```sh
-truescore audit   results.csv --judge judge_passed --gold human_passed --markdown report.md
-truescore compare results.csv --judge-a v4_pass --judge-b v3_pass --gold-a v4_human --gold-b v3_human
-truescore drift   anchor.csv  --baseline judge_may --current judge_june --gold human_passed
-truescore monitor stream.csv  --metric passed --baseline 0.88 --window 300
-truescore plan    --n-total 4000 --target 0.03 --sensitivity 0.97 --specificity 0.47
-```
-
-Exit codes are built for CI: **0** ran and found nothing, **2** found something (drift, a
-regression, contamination), **1** could not run. A gate that cannot tell "your judge
-changed" from "your file has a typo" gets ignored, so those are different codes.
-
 ### In CI
 
-The repository ships a composite action, so a nightly job can fail on evidence rather than
-on somebody noticing:
-
 ```yaml
-- uses: SaifPunjwani/truescore@v0.3.0
+- uses: SaifPunjwani/truescore@v0.5.0
   with:
     command: drift
     args: anchor.csv --baseline judge_pinned --current judge_today --gold human_passed
 ```
 
-Set `fail-on-finding: false` to report without blocking while a team calibrates its
-thresholds.
+Set `fail-on-finding: false` to report without blocking.
 
-## What it does
+## What's in it
 
-| module | question it answers |
+| module | what it answers |
 | --- | --- |
-| `agreement` | How good is my judge? Accuracy, sensitivity/specificity, Cohen's κ, Gwet's AC1, Krippendorff's α — with intervals. |
-| `correct` | What is the *true* score? Prediction-powered inference and Rogan–Gladen misclassification correction. |
-| `bias` | What is my judge biased by? HC3-robust regression of judge error on length, self-preference, formatting; position-bias test for pairwise judges. |
-| `compare` | Is A actually better than B? McNemar (mid-p), paired bootstrap, sign-flip permutation, PPI-corrected comparison, Holm and BH. |
-| `slices` | Better for *whom*? Per-segment corrected estimates and comparisons, with multiplicity control across segments and an honest refusal for segments too thin to support a number. |
-| `sequential` | Can I watch this continuously? Confidence sequences valid at every sample size; windowed detection for regressions that start late. |
-| `drift` | Did my judge change under me? Paired anchor-set comparison, plus a label-flip rate that catches a rewritten judge whose accuracy is unchanged. |
-| `contamination` | Is my eval set in the training data? The exact exchangeability permutation test, with Fisher pooling across shards. |
-| `weighting` | Does this eval set look like production? Post-stratified estimation that reweights a curated eval set to the traffic mix customers actually generate. |
-| `power` | How many human labels do I need? Gold-label budgets, minimum detectable effect, required sample size. |
-| `report` | The artifact: JSON and markdown recording estimator, assumptions, and what the naive number would have said. |
-| `doctor` | What can this file even support? Profiles the columns, lists the runnable commands, says what is blocked and how many labels would unblock it, and scans every numeric column for judge bias with a multiplicity correction. |
-| `io` / `cli` | The on-ramp: sparse gold columns, many spellings of pass/fail, and a CI-gateable command line. |
+| `doctor` | What can this file support? Profiles columns, lists runnable commands, says what's blocked and how many labels would unblock it, scans numeric columns for judge bias. |
+| `correct` | What's the true score? Prediction-powered inference, Rogan–Gladen correction. |
+| `agreement` | How good is the judge? Accuracy, sensitivity, specificity, Cohen's κ, Gwet's AC1, Krippendorff's α, all with intervals. |
+| `bias` | What's the judge biased by? HC3 regression on length, self-preference, formatting. Position-bias test for pairwise judges. |
+| `compare` | Is A better than B? McNemar (mid-p), paired bootstrap, permutation, PPI-corrected comparison, Holm and BH. |
+| `slices` | Better for whom? Per-segment correction with multiplicity control. |
+| `sequential` | Can I watch this live? Confidence sequences, windowed detection for late regressions. |
+| `drift` | Did the judge change? Anchor-set comparison plus a label-flip rate. |
+| `weighting` | Does this eval set look like production? Post-stratified reweighting. |
+| `contamination` | Is the eval set in the training data? Exact permutation test. |
+| `power` | How many labels do I need? Budgets, minimum detectable effect, sample size. |
+| `report` | JSON and markdown artifact recording estimator, assumptions, and the naive number. |
+| `io` / `cli` | CSV and JSONL loading, sparse gold columns, the command line. |
 
-Human labeling is the real cost of trustworthy evaluation, so `power` prices it directly.
-Against the judge measured in the example data:
+Labeling is the expensive part, so `power` prices it. Against the judge in the sample data:
 
 ```
   +/-0.05:   232 labels (without the judge:   317, saving 85)
@@ -141,45 +149,60 @@ Against the judge measured in the example data:
   +/-0.02:  1644 labels (without the judge:  1978, saving 334)
 ```
 
-## What it is not
+## How many human labels do you actually need?
 
-Not an eval runner, not a judge, not a prompt framework, not a dataset, not an
-observability platform. It never calls a model. It consumes the output of whatever harness
-you already use — internal, lm-eval-harness, or a vendor — which is what makes it
-composable rather than competitive.
+Some, for the correction. You can't calibrate an instrument without something to calibrate
+it against.
 
-## Methods
+About half the library needs none: regression monitoring, contamination testing,
+position-bias detection, and label planning all run on judge output alone.
 
-Derivations, assumptions, and stated limits live in [`docs/methods/`](docs/methods/) —
-prediction-powered inference, confidence sequences, judge bias and slicing, and the
-contamination test. Every claim on those pages names the test that enforces it.
+For the rest, three things make it cheaper than it sounds. It's a few hundred labels, not
+thousands. You label once and reuse across releases. And you may already have human
+verdicts sitting in your database: escalations, thumbs-down, refunds, whether the customer
+came back.
 
-## Why the numbers are trustworthy
+You can substitute a stronger model for the human. The math still works, but your
+guarantee is then relative to that model being right, which nobody has checked.
 
-Every interval estimator is verified by simulation in CI: draw from a known ground truth
-hundreds of times and assert the nominal 95% interval covers about 95% of the time. That
-includes the hard case — the confidence sequence is checked for coverage *over whole
-trajectories*, not at single time points. A statistics library that does not verify its own
-coverage is asserting exactly what it ought to be proving.
+## What it isn't
 
-Beyond coverage, the suite fuzzes every public function against adversarial inputs and
-enforces one contract: **no NaN ever escapes.** Any input either produces a finite result or
-raises `ValueError`. That pass found three real defects on its first run, all fixed.
+Not an eval runner, not a judge, not a prompt framework, not a dataset. It never calls a
+model. It reads the output of whatever harness you already use.
 
-602 tests, `mypy --strict`, numpy and scipy as the only dependencies, no GPU, no network,
-no model calls.
+## Why trust the numbers
+
+Every interval estimator has a coverage test: simulate from a known truth hundreds of
+times, check that the 95% interval covers about 95% of the time. The confidence sequence
+is checked over whole trajectories, which is the stronger claim it makes.
+
+The suite also fuzzes every public function against adversarial inputs and requires that
+nothing ever returns a NaN. Any input either gives a finite result or raises `ValueError`.
+That found three real bugs before release, including one where a near-deterministic slice
+got an interval with 7.7% coverage.
+
+602 tests. `mypy --strict`. numpy and scipy are the only dependencies.
+
+Derivations, assumptions, and known limits are in [`docs/methods/`](docs/methods/).
 
 ## Examples
 
+```sh
+python examples/generate_sample_data.py
+for f in examples/0*.py; do python "$f"; done
+```
+
 | script | what it shows |
 | --- | --- |
-| `01_audit_an_eval.py` | Correct a judge-scored eval; judge quality and bias profile. |
-| `02_compare_two_models.py` | The launch-review trap: +17 points reported, +9 real. |
-| `03_monitor_a_release.py` | Anytime-valid monitoring, and why cumulative is the wrong question. |
-| `04_detect_judge_drift.py` | An anchor set catching a judge that changed. |
-| `05_plan_a_labeling_budget.py` | What precision costs, and what a better judge is worth. |
-| `06_find_the_regressed_segment.py` | The judge says all three segments improved; one regressed by 17 points. |
-| `judge_correction.py` | The core correction in isolation, no files needed. |
+| `01_audit_an_eval.py` | Correcting a judge-scored eval. |
+| `02_compare_two_models.py` | +17 points reported, +9 real. |
+| `03_monitor_a_release.py` | Live monitoring, and why cumulative is the wrong question. |
+| `04_detect_judge_drift.py` | An anchor set catching a changed judge. |
+| `05_plan_a_labeling_budget.py` | What precision costs. |
+| `06_find_the_regressed_segment.py` | All three segments "improved". One regressed 17 points. |
 
-Every number those scripts print is computed at run time. `generate_sample_data.py` builds
-the inputs and states the ground truth it planted, so each claim can be checked.
+Every number those scripts print is computed when you run them.
+
+## License
+
+Apache-2.0.
