@@ -220,3 +220,48 @@ def test_compare_rejects_misaligned_gold_columns(
     )
     assert code == EXIT_ERROR
     assert "same rows" in capsys.readouterr().err
+
+
+def test_slices_flags_the_regressed_segment(capsys: pytest.CaptureFixture[str]) -> None:
+    """The headline slice case, through the command line a CI job would run."""
+    code = main(
+        [
+            "slices",
+            str(DATA / "support_segments.csv"),
+            "--by",
+            "segment",
+            "--judge-a",
+            "v4_judge_passed",
+            "--gold-a",
+            "v4_human_passed",
+            "--judge-b",
+            "v3_judge_passed",
+            "--gold-b",
+            "v3_human_passed",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert code == EXIT_FINDING
+    assert "technical" in out
+    assert "regressed on technical" in out
+
+
+def test_slices_estimates_when_only_one_system_is_given(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    code = main(
+        [
+            "slices",
+            str(DATA / "support_segments.csv"),
+            "--by",
+            "segment",
+            "--judge-a",
+            "v4_judge_passed",
+            "--gold-a",
+            "v4_human_passed",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert code == EXIT_OK
+    assert "corrected" in out
+    assert "judge said" in out

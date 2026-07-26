@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.0 — 2026-07-26
+
+### Added
+
+- **`truescore.slices`** — the question that follows every launch decision: v4 wins
+  overall, but is there a segment it makes worse? Per-segment corrected estimates and
+  comparisons, with multiplicity control across segments (Holm by default) and an honest
+  refusal for segments holding too few human labels to support a number. In the sample
+  data the judge reports an improvement on all three support segments while v4 has in
+  fact regressed on one by 17 points; per-segment correction recovers `-0.1659` against a
+  planted truth of `-0.1663`.
+- `truescore slices` on the command line, exiting 2 when a segment regressed.
+- `examples/06_find_the_regressed_segment.py` and a segmented sample dataset.
+
 ## 0.2.0 — 2026-07-25
 
 Everything needed to run this against a real evaluation, rather than only from a notebook.

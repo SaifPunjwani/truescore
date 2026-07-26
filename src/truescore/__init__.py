@@ -70,8 +70,16 @@ from truescore.sequential import (
     first_exclusion,
     windowed_exclusion,
 )
+from truescore.slices import (
+    SliceComparison,
+    SliceEstimate,
+    SliceReport,
+    compare_slices,
+    counts_by_slice,
+    estimate_slices,
+)
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     "AgreementReport",
@@ -87,13 +95,19 @@ __all__ = [
     "GoldBudget",
     "Interval",
     "PositionBiasResult",
+    "SliceComparison",
+    "SliceEstimate",
+    "SliceReport",
     "__version__",
     "anchor_fingerprint",
     "benjamini_hochberg",
     "build_report",
     "cohen_kappa",
     "combine_shards",
+    "compare_slices",
     "confidence_sequence",
+    "counts_by_slice",
+    "estimate_slices",
     "exchangeability_test",
     "first_exclusion",
     "gold_only_estimate",

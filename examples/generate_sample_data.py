@@ -168,7 +168,52 @@ def main() -> None:
         for i, value in enumerate(stream):
             writer.writerow([f"r{i:05d}", int(value)])
 
-    # 5. Log-likelihoods for a contamination check on a public benchmark: one canonical
+    # 5. A segmented dataset: v4 improves overall but regresses on one segment, and the
+    #    judge is most lenient on exactly that segment because its answers are longest.
+    segment_names = np.asarray(["billing", "account", "technical"])
+    segment_share = [0.40, 0.35, 0.25]
+    v4_by_segment = {"billing": 0.78, "account": 0.76, "technical": 0.46}
+    segment_length = {"billing": 4.6, "account": 4.7, "technical": 5.6}
+
+    seg_index = rng.choice(3, N_EXAMPLES, p=segment_share)
+    segments = segment_names[seg_index]
+    seg_truth_v3 = rng.binomial(1, 0.62, N_EXAMPLES)
+    seg_truth_v4 = rng.binomial(1, np.asarray([v4_by_segment[s] for s in segments]))
+    seg_len_v3 = np.round(rng.lognormal(4.6, SD_LOG_LENGTH, N_EXAMPLES))
+    seg_len_v4 = np.round(
+        rng.lognormal(np.asarray([segment_length[s] for s in segments]), SD_LOG_LENGTH)
+    )
+    seg_judge_v3 = _judge_verdicts(rng, seg_truth_v3, seg_len_v3)
+    seg_judge_v4 = _judge_verdicts(rng, seg_truth_v4, seg_len_v4)
+    seg_labeled = np.sort(rng.choice(N_EXAMPLES, 1500, replace=False))
+    seg_is_labeled = np.zeros(N_EXAMPLES, dtype=bool)
+    seg_is_labeled[seg_labeled] = True
+
+    with (DATA_DIR / "support_segments.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(
+            [
+                "example_id",
+                "segment",
+                "v3_judge_passed",
+                "v4_judge_passed",
+                "v3_human_passed",
+                "v4_human_passed",
+            ]
+        )
+        for i in range(N_EXAMPLES):
+            writer.writerow(
+                [
+                    f"q{i:05d}",
+                    segments[i],
+                    int(seg_judge_v3[i]),
+                    int(seg_judge_v4[i]),
+                    str(int(seg_truth_v3[i])) if seg_is_labeled[i] else "",
+                    str(int(seg_truth_v4[i])) if seg_is_labeled[i] else "",
+                ]
+            )
+
+    # 6. Log-likelihoods for a contamination check on a public benchmark: one canonical
     #    ordering and 199 shuffles, for a model that never saw the data.
     with (DATA_DIR / "contamination_logliks.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
@@ -185,6 +230,15 @@ def main() -> None:
     print(f"  judge says v3:     {judge_v3.mean():.4f}")
     print(f"  judge says v4:     {judge_v4.mean():.4f}")
     print(f"  judge's version:   {judge_v4.mean() - judge_v3.mean():+.4f}")
+    print("  segmented dataset (support_segments.csv):")
+    for name in segment_names:
+        mask = segments == name
+        true_gap = seg_truth_v4[mask].mean() - seg_truth_v3[mask].mean()
+        judged_gap = seg_judge_v4[mask].mean() - seg_judge_v3[mask].mean()
+        print(
+            f"    {name:<10} true {true_gap:+.4f}   as judged {judged_gap:+.4f}"
+            f"   ({mask.sum()} examples)"
+        )
 
 
 if __name__ == "__main__":

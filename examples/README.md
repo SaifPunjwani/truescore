@@ -27,6 +27,7 @@ python examples/generate_sample_data.py
 | `03_monitor_a_release.py` | Should we roll back? | A regression at request 600, caught at 867 — with an error budget covering the entire run, however often it was checked. |
 | `04_detect_judge_drift.py` | Did the judge change? | Anchor-set agreement falls 0.855 → 0.747 between two runs, with a fingerprint proving the same examples were used. |
 | `05_plan_a_labeling_budget.py` | How many labels do we buy? | What each precision costs, what a better judge would save, and what an eval that size can resolve. |
+| `06_find_the_regressed_segment.py` | Better for *everyone*? | The judge says all three segments improved. One regressed by 17 points; the corrected analysis recovers it at p = 2e-07. |
 | `judge_correction.py` | Why does any of this work? | The correction in isolation, on generated data, no files required. |
 
 Run them in order; each is self-contained and takes a few seconds.
@@ -58,6 +59,10 @@ truescore contamination examples/data/contamination_logliks.csv
 
 truescore plan --n-total 4000 --target 0.03 --rate 0.71 \
     --sensitivity 0.97 --specificity 0.47
+
+truescore slices examples/data/support_segments.csv --by segment \
+    --judge-a v4_judge_passed --judge-b v3_judge_passed \
+    --gold-a v4_human_passed --gold-b v3_human_passed
 ```
 
 `drift` and `monitor` exit **2** when they find something, so a nightly job can fail the
@@ -76,6 +81,7 @@ build on a judge that changed underneath you:
 | `support_compare.csv` | Both versions on the same questions, with human labels for both. |
 | `judge_anchor.csv` | 600 frozen anchor examples judged in May and again in June. |
 | `release_stream.csv` | 1200 requests from a release that regressed at the halfway point. |
+| `support_segments.csv` | The same two versions split across three support segments, where v4 regresses on one of them. |
 | `contamination_logliks.csv` | One canonical ordering and 199 shuffles, for a model that never saw the data. |
 
 The sparse `human_passed` column — filled on a few rows, blank on the rest — is not a

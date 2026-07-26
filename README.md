@@ -40,6 +40,12 @@ judge's length bias measures at `+0.069` per 100 tokens (p = 1e-05). A launch re
 believed the judge's number would be paying for verbosity, and would keep paying on every
 release after this one.
 
+And the overall number is not the end of it. Split the same evaluation by support
+segment, and the judge reports an improvement on all three — while v4 has in fact
+regressed on one of them by 17 points, because that is the segment where its answers got
+longest. Correcting each segment separately recovers it (`-0.1659` against a planted truth
+of `-0.1663`) and flags it at an adjusted p of 2e-07.
+
 ## And you cannot fix it by watching the dashboard
 
 A 95% confidence interval is valid at *one* pre-specified sample size. Checked repeatedly
@@ -94,6 +100,7 @@ changed" from "your file has a typo" gets ignored, so those are different codes.
 | `correct` | What is the *true* score? Prediction-powered inference and Rogan–Gladen misclassification correction. |
 | `bias` | What is my judge biased by? HC3-robust regression of judge error on length, self-preference, formatting; position-bias test for pairwise judges. |
 | `compare` | Is A actually better than B? McNemar (mid-p), paired bootstrap, sign-flip permutation, PPI-corrected comparison, Holm and BH. |
+| `slices` | Better for *whom*? Per-segment corrected estimates and comparisons, with multiplicity control across segments and an honest refusal for segments too thin to support a number. |
 | `sequential` | Can I watch this continuously? Confidence sequences valid at every sample size; windowed detection for regressions that start late. |
 | `drift` | Did my judge change under me? Paired anchor-set comparison, plus a label-flip rate that catches a rewritten judge whose accuracy is unchanged. |
 | `contamination` | Is my eval set in the training data? The exact exchangeability permutation test, with Fisher pooling across shards. |
@@ -129,7 +136,7 @@ Beyond coverage, the suite fuzzes every public function against adversarial inpu
 enforces one contract: **no NaN ever escapes.** Any input either produces a finite result or
 raises `ValueError`. That pass found three real defects on its first run, all fixed.
 
-565 tests, `mypy --strict`, numpy and scipy as the only dependencies, no GPU, no network,
+575 tests, `mypy --strict`, numpy and scipy as the only dependencies, no GPU, no network,
 no model calls.
 
 ## Examples
@@ -141,6 +148,7 @@ no model calls.
 | `03_monitor_a_release.py` | Anytime-valid monitoring, and why cumulative is the wrong question. |
 | `04_detect_judge_drift.py` | An anchor set catching a judge that changed. |
 | `05_plan_a_labeling_budget.py` | What precision costs, and what a better judge is worth. |
+| `06_find_the_regressed_segment.py` | The judge says all three segments improved; one regressed by 17 points. |
 | `judge_correction.py` | The core correction in isolation, no files needed. |
 
 Every number those scripts print is computed at run time. `generate_sample_data.py` builds

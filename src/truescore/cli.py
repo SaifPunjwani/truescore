@@ -7,6 +7,8 @@ Five commands over the files a team already produces:
     truescore drift    anchor.csv  --baseline judge_may --current judge_june --gold human
     truescore monitor  stream.csv  --metric passed --baseline 0.88
     truescore plan     --n-total 5000 --target 0.02 --sensitivity 0.92 --specificity 0.85
+    truescore slices   results.csv --by segment --judge-a v4 --gold-a v4_human \
+                                   --judge-b v3 --gold-b v3_human
 
 Exit codes are chosen so the tool can gate a pipeline:
 
@@ -39,6 +41,7 @@ from truescore.io import LabelSet, load_labels, read_rows
 from truescore.power import required_gold_labels
 from truescore.report import build_report
 from truescore.sequential import confidence_sequence, first_exclusion, windowed_exclusion
+from truescore.slices import compare_slices, estimate_slices
 
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -257,6 +260,49 @@ def _cmd_contamination(args: argparse.Namespace) -> int:
     return EXIT_FINDING if result.contaminated else EXIT_OK
 
 
+def _cmd_slices(args: argparse.Namespace) -> int:
+    rows = read_rows(args.file)
+    segments = np.asarray([str(row[args.by]) for row in rows])
+
+    if args.judge_b:
+        a = load_labels(rows, judge=args.judge_a, gold=args.gold_a)
+        b = load_labels(rows, judge=args.judge_b, gold=args.gold_b)
+        if not np.array_equal(a.gold_index, b.gold_index):
+            raise ValueError("both gold columns must be labeled on the same rows")
+        report = compare_slices(
+            a.judge,
+            b.judge,
+            a.gold,
+            b.gold,
+            a.gold_index,
+            segments,
+            by=args.by,
+            alpha=args.alpha,
+            correction=args.correction,
+            min_gold=args.min_gold,
+        )
+        print(report.summary())
+        regressed = [c for c in report.comparisons if c.significant and c.difference < 0]
+        if regressed:
+            names = ", ".join(c.name for c in regressed)
+            print(f"\nFINDING: regressed on {names} after correcting for judge error.")
+            return EXIT_FINDING
+        return EXIT_OK
+
+    labels = load_labels(rows, judge=args.judge_a, gold=args.gold_a)
+    report = estimate_slices(
+        labels.judge,
+        labels.gold,
+        labels.gold_index,
+        segments,
+        by=args.by,
+        alpha=args.alpha,
+        min_gold=args.min_gold,
+    )
+    print(report.summary())
+    return EXIT_OK
+
+
 def _cmd_agreement(args: argparse.Namespace) -> int:
     labels = _load(args)
     report = judge_agreement(
@@ -340,6 +386,18 @@ def _build_parser() -> argparse.ArgumentParser:
     contamination.add_argument("--shard-column", help="pool independent shards if present")
     add_common(contamination)
     contamination.set_defaults(func=_cmd_contamination)
+
+    slices = sub.add_parser("slices", help="per-segment estimates or comparisons")
+    slices.add_argument("file")
+    slices.add_argument("--by", required=True, help="column to slice on")
+    slices.add_argument("--judge-a", required=True)
+    slices.add_argument("--gold-a", required=True)
+    slices.add_argument("--judge-b", help="second system; omit to estimate rather than compare")
+    slices.add_argument("--gold-b")
+    slices.add_argument("--correction", choices=("holm", "bh", "none"), default="holm")
+    slices.add_argument("--min-gold", type=int, default=20)
+    add_common(slices)
+    slices.set_defaults(func=_cmd_slices)
 
     agreement = sub.add_parser("agreement", help="judge quality against human labels")
     agreement.add_argument("file")
