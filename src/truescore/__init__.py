@@ -38,12 +38,24 @@ from truescore.compare import (
     paired_permutation,
     ppi_compare,
 )
+from truescore.contamination import (
+    CombinedContamination,
+    ContaminationResult,
+    combine_shards,
+    exchangeability_test,
+)
 from truescore.correct import (
     Estimate,
     gold_only_estimate,
     judge_only_estimate,
     ppi_estimate,
     rogan_gladen_estimate,
+)
+from truescore.drift import (
+    DriftReport,
+    anchor_fingerprint,
+    judge_drift,
+    monitor_agreement,
 )
 from truescore.power import (
     GoldBudget,
@@ -52,33 +64,49 @@ from truescore.power import (
     required_pairs,
 )
 from truescore.report import EvalReport, build_report
+from truescore.sequential import (
+    ConfidenceSequence,
+    confidence_sequence,
+    first_exclusion,
+)
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "AgreementReport",
     "BiasEffect",
     "BiasReport",
+    "CombinedContamination",
     "ComparisonResult",
+    "ConfidenceSequence",
+    "ContaminationResult",
+    "DriftReport",
     "Estimate",
     "EvalReport",
     "GoldBudget",
     "Interval",
     "PositionBiasResult",
     "__version__",
+    "anchor_fingerprint",
     "benjamini_hochberg",
     "build_report",
     "cohen_kappa",
+    "combine_shards",
+    "confidence_sequence",
+    "exchangeability_test",
+    "first_exclusion",
     "gold_only_estimate",
     "gwet_ac1",
     "holm",
     "judge_agreement",
+    "judge_drift",
     "judge_error_regression",
     "judge_only_estimate",
     "krippendorff_alpha",
     "length_bias",
     "mcnemar",
     "min_detectable_effect",
+    "monitor_agreement",
     "paired_bootstrap",
     "paired_permutation",
     "position_bias",
