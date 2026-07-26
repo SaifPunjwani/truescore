@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.5.0 — 2026-07-26
+
+First public release.
+
+### Added
+
+- **`truescore doctor`** — point it at an evaluation file and it profiles every column,
+  lists the commands you can run today, says what is blocked and how many human labels
+  would unblock it, and scans every numeric column for judge bias with a Holm correction.
+  On the sample data it finds both planted biases without being told to look.
+- Landing page, contributing and security policies, issue and PR templates.
+
+### Changed
+
+- Licensed Apache-2.0 and published to PyPI.
+- README, contributing guide and examples guide rewritten in plainer prose. No technical
+  claim or number changed.
+
 ## 0.4.1 — 2026-07-26
 
 ### Fixed
