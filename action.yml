@@ -1,0 +1,76 @@
+name: truescore
+description: >-
+  Gate a pipeline on evaluation evidence: a judge that drifted, a segment that regressed,
+  or a release whose pass rate has provably fallen.
+author: Saif Punjwani
+
+branding:
+  icon: check-circle
+  color: blue
+
+inputs:
+  command:
+    description: >-
+      Which check to run: audit, compare, drift, monitor, slices, contamination or
+      agreement.
+    required: true
+  args:
+    description: >-
+      Arguments passed through to the command, e.g.
+      "results.csv --judge judge_passed --gold human_passed".
+    required: true
+  fail-on-finding:
+    description: >-
+      Whether a statistical finding should fail the job. Set false to report findings
+      without blocking, which is the sensible first setting while a team calibrates its
+      thresholds.
+    required: false
+    default: "true"
+  python-version:
+    description: Python version used to run the check.
+    required: false
+    default: "3.12"
+
+outputs:
+  finding:
+    description: "true when the check found something, false otherwise."
+    value: ${{ steps.run.outputs.finding }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install truescore
+      shell: bash
+      run: pip install --quiet ${{ github.action_path }}
+
+    - name: Run ${{ inputs.command }}
+      id: run
+      shell: bash
+      run: |
+        set +e
+        truescore ${{ inputs.command }} ${{ inputs.args }} | tee truescore-output.txt
+        code=${PIPESTATUS[0]}
+        # PIPESTATUS[0], not $?: $? is tee's status and would silently swallow every
+        # finding, leaving a gate that always passes.
+        case "$code" in
+          0) echo "finding=false" >> "$GITHUB_OUTPUT" ;;
+          2) echo "finding=true"  >> "$GITHUB_OUTPUT" ;;
+          *) echo "::error::truescore could not run (exit $code)"; exit "$code" ;;
+        esac
+
+        {
+          echo "### truescore ${{ inputs.command }}"
+          echo
+          echo '```'
+          cat truescore-output.txt
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"
+
+        if [ "$code" -eq 2 ] && [ "${{ inputs.fail-on-finding }}" = "true" ]; then
+          echo "::error::truescore ${{ inputs.command }} reported a finding"
+          exit 1
+        fi

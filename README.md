@@ -92,6 +92,21 @@ Exit codes are built for CI: **0** ran and found nothing, **2** found something 
 regression, contamination), **1** could not run. A gate that cannot tell "your judge
 changed" from "your file has a typo" gets ignored, so those are different codes.
 
+### In CI
+
+The repository ships a composite action, so a nightly job can fail on evidence rather than
+on somebody noticing:
+
+```yaml
+- uses: SaifPunjwani/truescore@v0.3.0
+  with:
+    command: drift
+    args: anchor.csv --baseline judge_pinned --current judge_today --gold human_passed
+```
+
+Set `fail-on-finding: false` to report without blocking while a team calibrates its
+thresholds.
+
 ## What it does
 
 | module | question it answers |
