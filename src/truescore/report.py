@@ -159,7 +159,8 @@ class EvalReport:
             "",
             "## What this report does not establish",
             "",
-            "- That the evaluation set represents production traffic.",
+            "- That the evaluation set represents production traffic; reweight with "
+            "truescore.weighting if you know the production mix.",
             "- That the gold labels are correct; they are treated as ground truth by definition.",
             "- Anything about examples outside this evaluation set.",
             "",

@@ -119,6 +119,7 @@ thresholds.
 | `sequential` | Can I watch this continuously? Confidence sequences valid at every sample size; windowed detection for regressions that start late. |
 | `drift` | Did my judge change under me? Paired anchor-set comparison, plus a label-flip rate that catches a rewritten judge whose accuracy is unchanged. |
 | `contamination` | Is my eval set in the training data? The exact exchangeability permutation test, with Fisher pooling across shards. |
+| `weighting` | Does this eval set look like production? Post-stratified estimation that reweights a curated eval set to the traffic mix customers actually generate. |
 | `power` | How many human labels do I need? Gold-label budgets, minimum detectable effect, required sample size. |
 | `report` | The artifact: JSON and markdown recording estimator, assumptions, and what the naive number would have said. |
 | `io` / `cli` | The on-ramp: sparse gold columns, many spellings of pass/fail, and a CI-gateable command line. |
@@ -157,7 +158,7 @@ Beyond coverage, the suite fuzzes every public function against adversarial inpu
 enforces one contract: **no NaN ever escapes.** Any input either produces a finite result or
 raises `ValueError`. That pass found three real defects on its first run, all fixed.
 
-575 tests, `mypy --strict`, numpy and scipy as the only dependencies, no GPU, no network,
+587 tests, `mypy --strict`, numpy and scipy as the only dependencies, no GPU, no network,
 no model calls.
 
 ## Examples

@@ -78,8 +78,14 @@ from truescore.slices import (
     counts_by_slice,
     estimate_slices,
 )
+from truescore.weighting import (
+    StratumEstimate,
+    WeightedEstimate,
+    eval_composition,
+    post_stratified_estimate,
+)
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 __all__ = [
     "AgreementReport",
@@ -98,6 +104,8 @@ __all__ = [
     "SliceComparison",
     "SliceEstimate",
     "SliceReport",
+    "StratumEstimate",
+    "WeightedEstimate",
     "__version__",
     "anchor_fingerprint",
     "benjamini_hochberg",
@@ -108,6 +116,7 @@ __all__ = [
     "confidence_sequence",
     "counts_by_slice",
     "estimate_slices",
+    "eval_composition",
     "exchangeability_test",
     "first_exclusion",
     "gold_only_estimate",
@@ -125,6 +134,7 @@ __all__ = [
     "paired_bootstrap",
     "paired_permutation",
     "position_bias",
+    "post_stratified_estimate",
     "ppi_compare",
     "ppi_estimate",
     "required_gold_labels",

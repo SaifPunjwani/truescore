@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.0 — 2026-07-26
+
+### Added
+
+- **`truescore.weighting`** — post-stratified estimation, closing the one assumption every
+  report could previously only disclaim: that the evaluation set looks like production.
+  Evaluation sets are curated, and curation over-samples hard cases. Given the production
+  mix across a few strata, each stratum is estimated with PPI and recombined with
+  production's weights. On a set that over-samples hard questions three to one, the raw
+  number reads 0.745 where production would see 0.846; the weighted estimate recovers
+  0.854 with the truth inside its interval. Coverage is simulated, and the two limits that
+  have no statistical fix -- wrong weights, and bias *within* a stratum -- are carried in
+  the report's `assumptions` rather than left to the reader.
+- A composite **GitHub Action**, so a nightly job can fail on evidence: exit 2 becomes a
+  build failure unless `fail-on-finding` is false.
+- **`docs/methods/`** — derivations for PPI, confidence sequences, judge bias and slicing,
+  and the contamination test, each stating what it does *not* guarantee and naming the test
+  that enforces every claim.
+
 ## 0.3.0 — 2026-07-26
 
 ### Added
