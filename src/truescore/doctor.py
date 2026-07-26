@@ -179,26 +179,28 @@ def _scan_bias(
     """
     if not covariates:
         return ()
-    names, raw_p, effects = [], [], []
+    names: list[str] = []
+    raw_p: list[float] = []
+    slopes: list[float] = []
     for name, column in covariates.items():
         try:
-            effect = judge_error_regression(judge, gold, {name: column}).effects[0]
+            fitted = judge_error_regression(judge, gold, {name: column}).effects[0]
         except ValueError:
             continue
         names.append(name)
-        raw_p.append(effect.p_value)
-        effects.append(effect.effect)
+        raw_p.append(fitted.p_value)
+        slopes.append(fitted.effect)
     if not names:
         return ()
 
     adjusted = holm(np.asarray(raw_p))
-    findings = []
-    for name, effect, p_adj in zip(names, effects, adjusted, strict=True):
+    findings: list[str] = []
+    for name, slope, p_adj in zip(names, slopes, adjusted, strict=True):
         if p_adj < 0.05:
-            direction = "more generous" if effect > 0 else "harsher"
+            direction = "more generous" if slope > 0 else "harsher"
             findings.append(
                 f"{name}: the judge gets {direction} as it rises "
-                f"({effect:+.5f} per unit, adjusted p={p_adj:.3g})"
+                f"({slope:+.5f} per unit, adjusted p={p_adj:.3g})"
             )
     if not findings:
         findings.append(
