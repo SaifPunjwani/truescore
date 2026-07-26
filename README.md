@@ -78,7 +78,14 @@ report = ts.build_report(labels.judge, labels.gold, labels.gold_index)
 print(report.summary())
 ```
 
-As a command-line tool, over the CSV or JSONL your harness already writes:
+Start by pointing it at a file. It works out what your columns are, what it can compute
+today, what is blocked and by how many labels, and what your judge appears to be biased by:
+
+```sh
+truescore doctor results.csv
+```
+
+Then the analyses themselves, over the CSV or JSONL your harness already writes:
 
 ```sh
 truescore audit   results.csv --judge judge_passed --gold human_passed --markdown report.md
@@ -122,6 +129,7 @@ thresholds.
 | `weighting` | Does this eval set look like production? Post-stratified estimation that reweights a curated eval set to the traffic mix customers actually generate. |
 | `power` | How many human labels do I need? Gold-label budgets, minimum detectable effect, required sample size. |
 | `report` | The artifact: JSON and markdown recording estimator, assumptions, and what the naive number would have said. |
+| `doctor` | What can this file even support? Profiles the columns, lists the runnable commands, says what is blocked and how many labels would unblock it, and scans every numeric column for judge bias with a multiplicity correction. |
 | `io` / `cli` | The on-ramp: sparse gold columns, many spellings of pass/fail, and a CI-gateable command line. |
 
 Human labeling is the real cost of trustworthy evaluation, so `power` prices it directly.
@@ -158,7 +166,7 @@ Beyond coverage, the suite fuzzes every public function against adversarial inpu
 enforces one contract: **no NaN ever escapes.** Any input either produces a finite result or
 raises `ValueError`. That pass found three real defects on its first run, all fixed.
 
-590 tests, `mypy --strict`, numpy and scipy as the only dependencies, no GPU, no network,
+602 tests, `mypy --strict`, numpy and scipy as the only dependencies, no GPU, no network,
 no model calls.
 
 ## Examples

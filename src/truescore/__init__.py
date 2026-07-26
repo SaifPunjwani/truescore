@@ -51,6 +51,7 @@ from truescore.correct import (
     ppi_estimate,
     rogan_gladen_estimate,
 )
+from truescore.doctor import ColumnProfile, Diagnosis, diagnose
 from truescore.drift import (
     DriftReport,
     anchor_fingerprint,
@@ -91,10 +92,12 @@ __all__ = [
     "AgreementReport",
     "BiasEffect",
     "BiasReport",
+    "ColumnProfile",
     "CombinedContamination",
     "ComparisonResult",
     "ConfidenceSequence",
     "ContaminationResult",
+    "Diagnosis",
     "DriftReport",
     "Estimate",
     "EvalReport",
@@ -115,6 +118,7 @@ __all__ = [
     "compare_slices",
     "confidence_sequence",
     "counts_by_slice",
+    "diagnose",
     "estimate_slices",
     "eval_composition",
     "exchangeability_test",

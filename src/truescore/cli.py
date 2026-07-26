@@ -2,6 +2,7 @@
 
 Five commands over the files a team already produces:
 
+    truescore doctor   results.csv
     truescore audit    results.csv --judge passed --gold human_passed
     truescore compare  results.csv --judge-a v3_passed --judge-b v4_passed --gold-a ... --gold-b ...
     truescore drift    anchor.csv  --baseline judge_may --current judge_june --gold human
@@ -36,6 +37,7 @@ from truescore import __version__
 from truescore.agreement import judge_agreement
 from truescore.compare import mcnemar, ppi_compare
 from truescore.contamination import combine_shards, exchangeability_test
+from truescore.doctor import diagnose
 from truescore.drift import judge_drift
 from truescore.io import LabelSet, load_labels, read_rows
 from truescore.power import required_gold_labels
@@ -260,6 +262,11 @@ def _cmd_contamination(args: argparse.Namespace) -> int:
     return EXIT_FINDING if result.contaminated else EXIT_OK
 
 
+def _cmd_doctor(args: argparse.Namespace) -> int:
+    print(diagnose(args.file, alpha=args.alpha).summary())
+    return EXIT_OK
+
+
 def _cmd_slices(args: argparse.Namespace) -> int:
     rows = read_rows(args.file)
     segments = np.asarray([str(row[args.by]) for row in rows])
@@ -386,6 +393,11 @@ def _build_parser() -> argparse.ArgumentParser:
     contamination.add_argument("--shard-column", help="pool independent shards if present")
     add_common(contamination)
     contamination.set_defaults(func=_cmd_contamination)
+
+    doctor = sub.add_parser("doctor", help="point at an eval file and see what it supports")
+    doctor.add_argument("file")
+    add_common(doctor)
+    doctor.set_defaults(func=_cmd_doctor)
 
     slices = sub.add_parser("slices", help="per-segment estimates or comparisons")
     slices.add_argument("file")
