@@ -44,6 +44,7 @@ __all__ = [
     "ConfidenceSequence",
     "confidence_sequence",
     "first_exclusion",
+    "windowed_exclusion",
 ]
 
 Method = Literal["empirical_bernstein", "hoeffding"]
@@ -112,7 +113,7 @@ def _rescale(values: npt.NDArray[Any], bounds: tuple[float, float]) -> npt.NDArr
 
 
 def _empirical_bernstein_bounds(
-    x: npt.NDArray[Any], alpha: float, lambda_cap: float
+    x: npt.NDArray[Any], alpha: float, lambda_cap: float, one_sided: bool
 ) -> tuple[npt.NDArray[Any], npt.NDArray[Any]]:
     """Predictable-plug-in empirical-Bernstein bounds for observations in [0, 1].
 
@@ -121,6 +122,10 @@ def _empirical_bernstein_bounds(
     (it may depend only on ``X_1..X_{i-1}``), ``v_i = 4(X_i − μ̂_{i−1})²`` and
     ``ψ_E(λ) = (−log(1 − λ) − λ)/4``. Solving the inequality for ``m`` gives the bounds
     returned here.
+
+    A monitor that only asks "has the rate fallen?" spends its budget on one tail, so
+    ``one_sided`` replaces ``log(2/α)`` with ``log(1/α)``. Both bounds are still returned;
+    only the one being tested retains the guarantee.
     """
     n = x.shape[0]
     index = np.arange(1, n + 1, dtype=float)
@@ -141,7 +146,8 @@ def _empirical_bernstein_bounds(
 
     weighted_sum = np.cumsum(lam * x)
     weight_total = np.cumsum(lam)
-    budget = np.log(2.0 / alpha) + np.cumsum(v * psi)
+    tail_budget = np.log(1.0 / alpha) if one_sided else np.log(2.0 / alpha)
+    budget = tail_budget + np.cumsum(v * psi)
 
     centre = weighted_sum / weight_total
     margin = budget / weight_total
@@ -181,6 +187,7 @@ def confidence_sequence(
     bounds: tuple[float, float] = (0.0, 1.0),
     target_n: int = 1000,
     lambda_cap: float = 0.5,
+    one_sided: bool = False,
 ) -> ConfidenceSequence:
     """Build a confidence sequence: an interval valid at every sample size at once.
 
@@ -197,6 +204,10 @@ def confidence_sequence(
             effect on validity. Ignored by the empirical-Bernstein construction.
         lambda_cap: Cap on the betting fraction of the empirical-Bernstein construction.
             Any fixed value in (0, 1) is valid; larger is more aggressive early on.
+        one_sided: Spend the whole error budget on one tail. Set this only when the
+            decision genuinely looks in one direction -- a regression alarm, say -- since
+            the untested bound then carries no guarantee. :func:`first_exclusion` sets it
+            automatically from ``direction``.
 
     Returns:
         A :class:`ConfidenceSequence` whose bound arrays are the running intersection of
@@ -222,7 +233,7 @@ def confidence_sequence(
     x = _rescale(raw, bounds)
 
     if method == "empirical_bernstein":
-        low, high = _empirical_bernstein_bounds(x, alpha, lambda_cap)
+        low, high = _empirical_bernstein_bounds(x, alpha, lambda_cap, one_sided)
     elif method == "hoeffding":
         low, high = _hoeffding_bounds(x, alpha, target_n)
     else:  # pragma: no cover - guarded by the Literal type
@@ -287,7 +298,12 @@ def first_exclusion(
         tests/test_sequential.py::test_first_exclusion_false_alarm_rate_is_controlled
     """
     sequence = confidence_sequence(
-        values, alpha=alpha, method=method, bounds=bounds, target_n=target_n
+        values,
+        alpha=alpha,
+        method=method,
+        bounds=bounds,
+        target_n=target_n,
+        one_sided=direction != "two-sided",
     )
     if direction == "below":
         excluded = sequence.upper_bounds < reference
@@ -298,3 +314,82 @@ def first_exclusion(
 
     hits = np.flatnonzero(excluded)
     return int(hits[0]) + 1 if hits.size else None
+
+
+def windowed_exclusion(
+    values: npt.ArrayLike,
+    reference: float,
+    *,
+    window: int,
+    alpha: float = 0.05,
+    direction: Literal["two-sided", "below", "above"] = "below",
+    method: Method = "empirical_bernstein",
+    bounds: tuple[float, float] = (0.0, 1.0),
+    planned_windows: int | None = None,
+) -> int | None:
+    """Detect a *recent* departure from ``reference``, rather than a cumulative one.
+
+    :func:`first_exclusion` asks whether the mean of everything observed so far differs
+    from the reference. That is the wrong question for a live monitor: a long healthy
+    prefix keeps the cumulative mean near the baseline for a long time after a regression
+    starts, so a genuine drop can go undetected for thousands of observations.
+
+    This function asks the operational question instead -- has the *recent* rate departed?
+    -- by running an independent confidence sequence over consecutive non-overlapping
+    windows and splitting the error budget across them. Each window is monitored
+    anytime-validly, so an alarm can fire part-way through one; the Bonferroni split keeps
+    the false-alarm probability for the whole run at ``alpha``.
+
+    The window length is the tradeoff: longer windows detect smaller departures but take
+    longer to react, and consume more of the budget per window.
+
+    Args:
+        values: Per-observation metric values in arrival order.
+        reference: The rate being defended.
+        window: Observations per window. Must be at least 2.
+        alpha: Total false-alarm budget for the entire monitoring run.
+        direction: ``"below"`` for a regression alarm; see :func:`first_exclusion`.
+        method: Construction, as in :func:`confidence_sequence`.
+        bounds: Known range of the metric.
+        planned_windows: Number of windows the budget is split across. Defaults to the
+            number of complete windows in ``values``. For a live monitor with no fixed
+            end, pre-specify the horizon here rather than letting it grow with the data.
+
+    Returns:
+        The 1-based observation index at which a departure was first established, or
+        ``None`` if none was.
+
+    Raises:
+        ValueError: If ``window`` is below 2 or ``planned_windows`` is below 1.
+
+    References:
+        tests/test_sequential.py::test_windowed_exclusion_detects_a_late_regression
+        tests/test_sequential.py::test_windowed_exclusion_false_alarm_rate_is_controlled
+    """
+    check_alpha(alpha)
+    if window < 2:
+        raise ValueError(f"window must be at least 2; got {window}")
+    series = to_1d_array("values", np.asarray(values, dtype=float))
+
+    n_windows = series.shape[0] // window
+    if n_windows == 0:
+        return None
+    budget_windows = planned_windows if planned_windows is not None else n_windows
+    if budget_windows < 1:
+        raise ValueError(f"planned_windows must be at least 1; got {budget_windows}")
+
+    per_window_alpha = alpha / budget_windows
+    for w in range(n_windows):
+        start = w * window
+        chunk = series[start : start + window]
+        hit = first_exclusion(
+            chunk,
+            reference,
+            alpha=per_window_alpha,
+            direction=direction,
+            method=method,
+            bounds=bounds,
+        )
+        if hit is not None:
+            return start + hit
+    return None

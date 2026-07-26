@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 
 from truescore.agreement import wilson_interval
-from truescore.sequential import confidence_sequence, first_exclusion
+from truescore.sequential import confidence_sequence, first_exclusion, windowed_exclusion
 
 METHODS = ("empirical_bernstein", "hoeffding")
 
@@ -167,3 +167,59 @@ def test_summary_states_the_guarantee() -> None:
     rng = np.random.default_rng(10)
     text = confidence_sequence(rng.binomial(1, 0.5, 100)).summary()
     assert "every sample size" in text
+
+
+def test_windowed_exclusion_detects_a_late_regression() -> None:
+    """A drop after a long healthy period is caught, which the cumulative test misses.
+
+    The cumulative mean is held up by the healthy prefix, so asking "is the mean of
+    everything below the baseline?" answers no long after the service has degraded.
+    Monitoring recent windows asks the question an operator actually has.
+    """
+    rng = np.random.default_rng(20)
+    healthy = rng.binomial(1, 0.88, 600)
+    regressed = rng.binomial(1, 0.78, 600)
+    stream = np.concatenate([healthy, regressed])
+
+    assert first_exclusion(stream, 0.88, direction="below") is None, (
+        "the cumulative sequence is expected to miss this; that is why windows exist"
+    )
+
+    alarm = windowed_exclusion(stream, 0.88, window=300)
+    assert alarm is not None
+    assert alarm > 600, "the alarm must not fire before the regression began"
+
+
+def test_windowed_exclusion_false_alarm_rate_is_controlled() -> None:
+    """Splitting the budget across windows keeps the whole run inside alpha."""
+    replications, rate = 300, 0.85
+    rng = np.random.default_rng(21)
+    alarms = sum(
+        int(windowed_exclusion(rng.binomial(1, rate, 900), rate, window=300) is not None)
+        for _ in range(replications)
+    )
+    assert alarms / replications <= 0.05
+
+
+def test_windowed_exclusion_handles_short_streams() -> None:
+    """Fewer observations than one window is not an error, just no verdict yet."""
+    rng = np.random.default_rng(22)
+    assert windowed_exclusion(rng.binomial(1, 0.5, 50), 0.9, window=300) is None
+
+
+def test_windowed_exclusion_validates_its_arguments() -> None:
+    rng = np.random.default_rng(23)
+    stream = rng.binomial(1, 0.5, 100)
+    with pytest.raises(ValueError, match="window must be at least 2"):
+        windowed_exclusion(stream, 0.5, window=1)
+    with pytest.raises(ValueError, match="planned_windows must be at least 1"):
+        windowed_exclusion(stream, 0.5, window=10, planned_windows=0)
+
+
+def test_one_sided_budget_is_tighter_than_two_sided() -> None:
+    """Spending the budget on one tail buys power on that tail."""
+    rng = np.random.default_rng(24)
+    stream = rng.binomial(1, 0.8, 500)
+    two_sided = confidence_sequence(stream, one_sided=False)
+    one_sided = confidence_sequence(stream, one_sided=True)
+    assert one_sided.high < two_sided.high

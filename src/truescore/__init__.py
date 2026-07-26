@@ -68,6 +68,7 @@ from truescore.sequential import (
     ConfidenceSequence,
     confidence_sequence,
     first_exclusion,
+    windowed_exclusion,
 )
 
 __version__ = "0.2.0"
@@ -116,4 +117,5 @@ __all__ = [
     "required_pairs",
     "rogan_gladen_estimate",
     "wilson_interval",
+    "windowed_exclusion",
 ]
