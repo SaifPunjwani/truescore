@@ -124,6 +124,12 @@ observability platform. It never calls a model. It consumes the output of whatev
 you already use — internal, lm-eval-harness, or a vendor — which is what makes it
 composable rather than competitive.
 
+## Methods
+
+Derivations, assumptions, and stated limits live in [`docs/methods/`](docs/methods/) —
+prediction-powered inference, confidence sequences, judge bias and slicing, and the
+contamination test. Every claim on those pages names the test that enforces it.
+
 ## Why the numbers are trustworthy
 
 Every interval estimator is verified by simulation in CI: draw from a known ground truth
