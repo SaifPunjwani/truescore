@@ -22,12 +22,20 @@ __all__ = [
 
 
 def to_1d_array(name: str, values: npt.ArrayLike) -> npt.NDArray[Any]:
-    """Return ``values`` as a 1-D array, raising ``ValueError`` if it is not 1-D."""
+    """Return ``values`` as a non-empty, 1-D, finite array.
+
+    Finiteness is enforced here rather than at each call site because no quantity in this
+    library has a meaningful NaN or infinite value, and a NaN admitted at the boundary
+    propagates silently all the way to a reported estimate. Failing loudly at the edge is
+    the difference between a bug report and a wrong number in a slide deck.
+    """
     arr = np.asarray(values)
     if arr.ndim != 1:
         raise ValueError(f"{name} must be 1-D; got shape {arr.shape}")
     if arr.size == 0:
         raise ValueError(f"{name} must be non-empty")
+    if np.issubdtype(arr.dtype, np.floating) and not bool(np.all(np.isfinite(arr))):
+        raise ValueError(f"{name} contains non-finite values")
     return arr
 
 

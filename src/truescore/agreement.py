@@ -109,10 +109,13 @@ def wilson_interval(successes: int, n: int, *, alpha: float = 0.05) -> Interval:
     denom = 1.0 + z * z / n
     center = (p + z * z / (2.0 * n)) / denom
     half = (z / denom) * np.sqrt(p * (1.0 - p) / n + z * z / (4.0 * n * n))
+    # Clamp against the sample proportion as well as the unit range: at successes == n
+    # the arithmetic can land a hair below 1.0, leaving the interval excluding its own
+    # point estimate.
     return Interval(
         point=p,
-        low=float(max(0.0, center - half)),
-        high=float(min(1.0, center + half)),
+        low=float(min(p, max(0.0, center - half))),
+        high=float(max(p, min(1.0, center + half))),
         level=1.0 - alpha,
         method="wilson",
     )

@@ -265,6 +265,14 @@ def ppi_estimate(
             "every example is gold-labeled, so there is no unlabeled set to borrow "
             "strength from; use gold_only_estimate instead"
         )
+    if judge_unlabeled.size < 2:
+        # The unlabeled variance term needs at least two observations to be estimable;
+        # with one, the interval would be silently NaN.
+        raise ValueError(
+            f"ppi_estimate needs at least 2 unlabeled examples; got {judge_unlabeled.size}. "
+            "With this little unlabeled data the judge cannot contribute precision -- use "
+            "gold_only_estimate instead."
+        )
     judge_labeled = judge_arr[idx]
 
     lam = _optimal_lambda(gold_arr, judge_labeled, judge_unlabeled) if lambda_ is None else lambda_
