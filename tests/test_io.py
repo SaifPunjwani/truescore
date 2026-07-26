@@ -91,7 +91,7 @@ def test_a_missing_judge_verdict_is_an_error_not_a_gap(tmp_path: Path) -> None:
     """Only the human column may be sparse; a hole in the judge column is a broken run."""
     path = tmp_path / "holes.csv"
     path.write_text("judge,human\n1,1\n,0\n", encoding="utf-8")
-    with pytest.raises(ValueError, match="row 2.*judge verdict is missing"):
+    with pytest.raises(ValueError, match=r"row 2.*judge verdict is missing"):
         load_labels(path, judge="judge", gold="human")
 
 
