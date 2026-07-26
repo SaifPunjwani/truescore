@@ -9,3 +9,4 @@ build/
 .mypy_cache/
 .ruff_cache/
 .DS_Store
+examples/audit_report.md
