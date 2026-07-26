@@ -100,6 +100,11 @@ class WeightedEstimate:
     assumptions: tuple[str, ...]
 
     @property
+    def half_width(self) -> float:
+        """Half the interval width, the usual '±' figure."""
+        return (self.high - self.low) / 2.0
+
+    @property
     def composition_effect(self) -> float:
         """Weighted minus unweighted: what the evaluation set's composition was worth."""
         return self.point - self.unweighted.point

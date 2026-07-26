@@ -219,3 +219,53 @@ def test_estimates_record_their_assumptions() -> None:
     estimate = ppi_estimate(trial.judge, trial.gold, trial.gold_index)
     assert estimate.assumptions
     assert any("random sample" in a for a in estimate.assumptions)
+
+
+def test_ppi_covers_a_near_deterministic_subgroup() -> None:
+    """The failure mode that a high-performing slice walks straight into.
+
+    When a subgroup is right ~99.7% of the time, a gold sample of a few dozen labels is
+    entirely 1s more often than not. The sample variance is then exactly zero, and an
+    asymptotic interval built from it has width zero and misses the truth. Measured before
+    the fix: 7.7% coverage. The estimator now widens to the exact interval whenever one
+    class has fewer than five observations.
+    """
+    replications, true_rate = 300, 0.997
+    rng = np.random.default_rng(41)
+    covered = 0
+    degenerate = 0
+    for _ in range(replications):
+        truth = rng.binomial(1, true_rate, 2000)
+        judge = np.where(truth == 1, rng.binomial(1, 0.98, 2000), rng.binomial(1, 0.2, 2000))
+        index = np.sort(rng.choice(2000, 30, replace=False))
+        gold = truth[index]
+        degenerate += int(gold.std(ddof=1) == 0)
+        estimate = ppi_estimate(judge, gold, index)
+        covered += int(estimate.low <= true_rate <= estimate.high)
+
+    assert degenerate / replications > 0.5, "this scenario should be mostly degenerate"
+    assert covered / replications >= 0.93, f"coverage was {covered / replications:.3f}"
+
+
+def test_the_widening_is_reported_in_the_method() -> None:
+    """A widened interval says so, because a reader deserves to know which rule applied."""
+    rng = np.random.default_rng(42)
+    truth = np.ones(1000, dtype=int)
+    truth[:3] = 0
+    judge = truth.copy()
+    index = np.sort(rng.choice(1000, 40, replace=False))
+    estimate = ppi_estimate(judge, truth[index], index)
+    assert "exact interval" in estimate.method
+
+
+def test_ppi_keeps_its_advantage_when_the_approximation_is_sound() -> None:
+    """The fix must be targeted: where the normal approximation is fine, PPI still wins."""
+    rng = np.random.default_rng(43)
+    ppi_widths, gold_widths = [], []
+    for _ in range(150):
+        truth = rng.binomial(1, 0.7, 4000)
+        judge = np.where(truth == 1, rng.binomial(1, 0.95, 4000), rng.binomial(1, 0.08, 4000))
+        index = np.sort(rng.choice(4000, 400, replace=False))
+        ppi_widths.append(ppi_estimate(judge, truth[index], index).half_width)
+        gold_widths.append(gold_only_estimate(truth[index]).half_width)
+    assert float(np.mean(ppi_widths)) < 0.75 * float(np.mean(gold_widths))

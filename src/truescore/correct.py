@@ -287,13 +287,29 @@ def ppi_estimate(
     if lam > 0.0:
         variance += (lam**2) * float(np.var(judge_unlabeled, ddof=1)) / n_unlabeled
     half = _z(alpha) * float(np.sqrt(variance))
+    method = "ppi++"
+
+    # The asymptotic interval is built from the sample variance of the rectifier, and that
+    # estimate is worthless when the gold labels carry almost no spread: a stratum where
+    # the system is right 99% of the time will routinely draw a gold sample that is
+    # entirely 1s, giving an estimated variance of exactly zero and an interval of width
+    # zero that misses the truth. Binary labels have an exact alternative, so use it
+    # whenever the normal approximation is out of its depth -- the usual criterion is fewer
+    # than five observations in the smaller class.
+    if _is_binary(gold_arr):
+        successes = int(gold_arr.sum())
+        if min(successes, n - successes) < 5:
+            exact = wilson_interval(successes, n, alpha=alpha)
+            half = max(half, (exact.high - exact.low) / 2.0)
+            method = "ppi++ (widened to the exact interval; too few of one class to trust "
+            method += "the normal approximation)"
 
     return Estimate(
         point=point,
         low=point - half,
         high=point + half,
         level=1.0 - alpha,
-        method="ppi++",
+        method=method,
         n_total=judge_arr.shape[0],
         n_gold=n,
         assumptions=(

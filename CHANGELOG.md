@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.4.1 — 2026-07-26
+
+### Fixed
+
+- **`ppi_estimate` returned an invalidly narrow interval for a near-deterministic
+  subgroup.** When a slice is right ~99.7% of the time, a gold sample of a few dozen
+  labels comes back entirely 1s more often than not; the sample variance is then exactly
+  zero and the asymptotic interval collapses to width zero. Measured coverage in that
+  regime was **7.7%** against a nominal 95%. The estimator now widens to the exact
+  interval whenever one class has fewer than five observations, and says so in `method`.
+  Coverage in the same scenario is now above 0.93, while PPI keeps its full advantage
+  (42% tighter than gold-only) where the normal approximation is sound.
+- `WeightedEstimate` gained the `half_width` property every other result type already had.
+
+### Investigated and rejected
+
+- **Stratified label allocation.** An initial measurement suggested that concentrating
+  human labels in the judge's uncertain band bought the same precision from 55% fewer
+  labels. That result was an artifact of the interval bug above: the "saving" came from
+  invalidly narrow intervals in the confident strata. Re-measured with correct intervals,
+  Neyman allocation delivers +1% to +3% in favourable scenarios and is materially *worse*
+  in the near-deterministic case that motivated it, because starving a high-weight stratum
+  of labels leaves genuine uncertainty the exact interval then has to report. The module
+  was removed rather than shipped with a claim its own measurements do not support.
+
 ## 0.4.0 — 2026-07-26
 
 ### Added

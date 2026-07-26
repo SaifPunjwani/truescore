@@ -158,7 +158,7 @@ Beyond coverage, the suite fuzzes every public function against adversarial inpu
 enforces one contract: **no NaN ever escapes.** Any input either produces a finite result or
 raises `ValueError`. That pass found three real defects on its first run, all fixed.
 
-587 tests, `mypy --strict`, numpy and scipy as the only dependencies, no GPU, no network,
+590 tests, `mypy --strict`, numpy and scipy as the only dependencies, no GPU, no network,
 no model calls.
 
 ## Examples
