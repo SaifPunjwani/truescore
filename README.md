@@ -239,6 +239,15 @@ covered 7.7% of the time.
 
 650 tests, `mypy --strict`, CI on Linux and macOS across Python 3.10 and 3.13.
 
+## Findings
+
+[88% agreement, 13 points of error](analysis/mt_bench/FINDINGS.md). MT-Bench published
+GPT-4's pairwise judgments and human judgments over the same 1814 comparisons. GPT-4 agrees
+with the humans 88% of the time and still reports its own win rate 12.7 points above what
+they give it. A 9.3-point self-preference survives controlling for the judge exaggerating
+the quality spread. `analysis/mt_bench/run.py` downloads the data and prints every number
+in the write-up.
+
 ## Documentation
 
 Derivations, assumptions and known limits: [`docs/methods/`](docs/methods/).

@@ -39,9 +39,10 @@ jobs:
       - name: Check every rendered page came out
         run: |
           set -euo pipefail
-          for page in index prediction-powered-inference confidence-sequences \
-                      judge-bias-and-slices contamination; do
-            test -s "_site/docs/methods/${page}.html" || {
+          for page in docs/methods/index docs/methods/prediction-powered-inference \
+                      docs/methods/confidence-sequences docs/methods/judge-bias-and-slices \
+                      docs/methods/contamination findings/mt-bench; do
+            test -s "_site/${page}.html" || {
               echo "missing or empty: ${page}.html"; exit 1; }
           done
           # A link left pointing at .md would 404 for every reader who followed it.

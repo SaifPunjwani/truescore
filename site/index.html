@@ -104,8 +104,29 @@ truescore doctor your_eval_results.csv</pre>
     <a class="btn primary" href="https://github.com/SaifPunjwani/truescore">GitHub</a>
     <a class="btn" href="https://pypi.org/project/truescore/">PyPI</a>
     <a class="btn" href="docs/methods/">Methods</a>
+    <a class="btn" href="findings/mt-bench.html">Findings</a>
   </div>
 </header>
+
+<h2>On real data</h2>
+
+<p>MT-Bench published GPT-4's pairwise judgments and human judgments over the same 1814
+comparisons. GPT-4 agrees with the humans 88% of the time, and still reports its own win
+rate 12.7 points above what they give it.</p>
+
+<table>
+  <tr><th>model</th><th>GPT-4 as judge</th><th>human</th><th>gap</th></tr>
+  <tr><td>gpt-4</td><td class="num">0.8521</td><td class="num">0.7249</td><td class="num bad">+0.1272</td></tr>
+  <tr><td>claude-v1</td><td class="num">0.7146</td><td class="num">0.6776</td><td class="num">+0.0370</td></tr>
+  <tr><td>gpt-3.5-turbo</td><td class="num">0.6158</td><td class="num">0.6431</td><td class="num">-0.0273</td></tr>
+  <tr><td>vicuna-13b-v1.2</td><td class="num">0.4615</td><td class="num">0.4735</td><td class="num">-0.0120</td></tr>
+  <tr><td>alpaca-13b</td><td class="num">0.2388</td><td class="num">0.2938</td><td class="num">-0.0550</td></tr>
+  <tr><td>llama-13b</td><td class="num">0.1154</td><td class="num">0.1776</td><td class="num">-0.0622</td></tr>
+</table>
+
+<p class="note">A 9.3-point self-preference survives controlling for the judge exaggerating
+the quality spread (p = 7.5e-07). <a href="findings/mt-bench.html">Full write-up</a>, with
+a script that downloads the data and prints every number.</p>
 
 <h2>Background</h2>
 

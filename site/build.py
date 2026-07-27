@@ -24,6 +24,15 @@ import markdown
 
 BASE = "https://saifpunjwani.github.io/truescore"
 
+STUDIES = {
+    "mt_bench": (
+        "mt-bench",
+        "88% agreement, 13 points of error",
+        "GPT-4 agrees with human judges on 88% of MT-Bench comparisons and still reports "
+        "its own win rate 12.7 points above theirs. Measured on public data, reproducible.",
+    ),
+}
+
 PAGES = {
     "README": ("Methods", "Derivations for the estimators in truescore."),
     "prediction-powered-inference": (
@@ -103,22 +112,23 @@ def stylesheet(root: Path) -> str:
     return match.group(1).strip()
 
 
+def convert(text: str) -> str:
+    """Markdown to HTML, with inter-page .md links rewritten for the web."""
+    text = re.sub(r"\]\((?!https?:)([\w./-]+)\.md\)", r"](\1.html)", text)
+    return markdown.markdown(
+        text, extensions=["tables", "fenced_code", "attr_list", "sane_lists"]
+    )
+
+
 def render(root: Path, out: Path) -> int:
     style = stylesheet(root)
-    source = root / "docs" / "methods"
+    written = 0
+
     target = out / "docs" / "methods"
     target.mkdir(parents=True, exist_ok=True)
-
-    written = 0
-    for path in sorted(source.glob("*.md")):
+    for path in sorted((root / "docs" / "methods").glob("*.md")):
         stem = path.stem
         title, description = PAGES.get(stem, (stem.replace("-", " ").capitalize(), ""))
-        text = path.read_text(encoding="utf-8")
-        # Links between these pages are written for the repository, where they end in .md.
-        text = re.sub(r"\]\((?!https?:)([\w./-]+)\.md\)", r"](\1.html)", text)
-        body = markdown.markdown(
-            text, extensions=["tables", "fenced_code", "attr_list", "sane_lists"]
-        )
         name = "index" if stem == "README" else stem
         canonical = f"{BASE}/docs/methods/" + ("" if name == "index" else f"{name}.html")
         (target / f"{name}.html").write_text(
@@ -128,7 +138,26 @@ def render(root: Path, out: Path) -> int:
                 canonical=canonical,
                 base=BASE,
                 style=style,
-                body=body,
+                body=convert(path.read_text(encoding="utf-8")),
+            ),
+            encoding="utf-8",
+        )
+        written += 1
+
+    findings = out / "findings"
+    findings.mkdir(parents=True, exist_ok=True)
+    for directory, (slug, title, description) in STUDIES.items():
+        path = root / "analysis" / directory / "FINDINGS.md"
+        if not path.exists():
+            raise SystemExit(f"study {directory} has no FINDINGS.md")
+        (findings / f"{slug}.html").write_text(
+            TEMPLATE.format(
+                title=html.escape(title),
+                description=html.escape(description),
+                canonical=f"{BASE}/findings/{slug}.html",
+                base=BASE,
+                style=style,
+                body=convert(path.read_text(encoding="utf-8")),
             ),
             encoding="utf-8",
         )
