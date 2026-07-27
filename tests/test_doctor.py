@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -160,3 +161,26 @@ def test_summary_is_readable_and_names_commands(labelled: Path) -> None:
 def test_missing_file_raises(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         diagnose(tmp_path / "absent.csv")
+
+
+def test_doctor_profiles_nested_json_paths(tmp_path: Path) -> None:
+    """A harness's nested output should profile like a table, with usable path names."""
+    path = tmp_path / "nested.jsonl"
+    rows = [
+        {
+            "gradingResult": {"pass": i % 4 != 0},
+            "response": {"tokenUsage": {"completion": 100 + i}},
+            "human": (i % 4 != 0) if i % 2 == 0 else None,
+        }
+        for i in range(40)
+    ]
+    path.write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
+
+    result = diagnose(path)
+    kinds = {c.name: c.kind for c in result.columns}
+
+    assert kinds["gradingResult.pass"] == "verdict"
+    assert kinds["response.tokenUsage.completion"] == "numeric"
+    assert kinds["human"] == "sparse_verdict"
+    # The suggested commands must carry the dotted path, or they won't run.
+    assert any("--judge gradingResult.pass" in item for item in result.available)

@@ -163,3 +163,69 @@ def test_summary_reports_coverage(csv_path: Path) -> None:
     text = load_labels(csv_path, judge="judge", gold="human", covariates=["tokens"]).summary()
     assert "human-labeled: 3" in text
     assert "covariates: tokens" in text
+
+
+def test_dotted_paths_read_nested_json(tmp_path: Path) -> None:
+    """Eval harnesses write nested JSON; users shouldn't have to flatten it first.
+
+    This is promptfoo's shape: the verdict lives at ``gradingResult.pass`` and token
+    counts at ``response.tokenUsage.completion``.
+    """
+    path = tmp_path / "nested.jsonl"
+    rows = [
+        {
+            "testCase": {"vars": {"id": f"t{i}"}},
+            "gradingResult": {"pass": i % 3 != 0, "score": i / 10},
+            "response": {"tokenUsage": {"completion": 100 + i}},
+            "human": (i % 3 != 0) if i % 2 == 0 else None,
+        }
+        for i in range(12)
+    ]
+    path.write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
+
+    labels = load_labels(
+        path,
+        judge="gradingResult.pass",
+        gold="human",
+        id_column="testCase.vars.id",
+        covariates=["response.tokenUsage.completion"],
+    )
+    assert labels.n_total == 12
+    assert labels.n_gold == 6
+    assert labels.ids is not None and labels.ids[0] == "t0"
+    assert np.array_equal(labels.covariates["response.tokenUsage.completion"], np.arange(100, 112))
+
+
+def test_dotted_paths_index_into_lists(tmp_path: Path) -> None:
+    """Some harnesses nest through a list of scorers."""
+    path = tmp_path / "listy.jsonl"
+    rows = [{"scores": [{"value": i % 2}, {"value": 1}]} for i in range(8)]
+    path.write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
+
+    labels = load_labels(path, judge="scores.0.value")
+    assert np.array_equal(labels.judge, np.asarray([0.0, 1.0] * 4))
+
+
+def test_a_flat_column_containing_dots_still_works(tmp_path: Path) -> None:
+    """A CSV header like 'judge.v2' is a name, not a path, and is looked up directly."""
+    path = tmp_path / "dotty.csv"
+    path.write_text("judge.v2,human\n1,1\n0,0\n1,\n", encoding="utf-8")
+    labels = load_labels(path, judge="judge.v2", gold="human")
+    assert labels.n_total == 3
+    assert labels.n_gold == 2
+
+
+def test_a_wrong_path_lists_real_nested_paths(tmp_path: Path) -> None:
+    """The error should name paths that exist, not just top-level keys."""
+    path = tmp_path / "nested.jsonl"
+    path.write_text(json.dumps({"gradingResult": {"pass": True}, "id": "a"}), encoding="utf-8")
+    with pytest.raises(ValueError, match=r"gradingResult\.pass"):
+        load_labels(path, judge="gradingResult.passed")
+
+
+def test_missing_nested_gold_values_count_as_unlabeled(tmp_path: Path) -> None:
+    path = tmp_path / "nested.jsonl"
+    rows = [{"g": {"p": True}, "h": {"v": 1 if i == 0 else None}} for i in range(4)]
+    path.write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
+    labels = load_labels(path, judge="g.p", gold="h.v")
+    assert labels.n_gold == 1

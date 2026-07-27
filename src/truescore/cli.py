@@ -96,6 +96,7 @@ def _cmd_audit(args: argparse.Namespace) -> int:
 
     _write(args.json, report.to_json(), "JSON report")
     _write(args.markdown, report.to_markdown(), "markdown report")
+    _write(args.html, report.to_html(), "HTML report")
 
     # A judge-only number that falls outside the corrected interval is the finding this
     # command exists to surface: the conventional score is not merely imprecise, it is
@@ -340,6 +341,9 @@ def _build_parser() -> argparse.ArgumentParser:
     audit.add_argument("--system-name", default="system")
     audit.add_argument("--json", help="write the JSON report here")
     audit.add_argument("--markdown", help="write the markdown report here")
+    audit.add_argument(
+        "--html", help="write a self-contained HTML report here, shareable as one file"
+    )
     add_common(audit)
     audit.set_defaults(func=_cmd_audit)
 

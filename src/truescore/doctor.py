@@ -20,7 +20,7 @@ authority: a column of zeros and ones might be a judge verdict or might be
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -30,7 +30,7 @@ import numpy.typing as npt
 
 from truescore.bias import judge_error_regression
 from truescore.compare import holm
-from truescore.io import read_rows
+from truescore.io import get_field, read_rows
 from truescore.power import required_gold_labels
 
 __all__ = ["ColumnProfile", "Diagnosis", "diagnose"]
@@ -86,14 +86,16 @@ class Diagnosis:
 
     def summary(self) -> str:
         """Human-readable multi-line report."""
+        # Dotted paths from nested JSON can be long, so size the column to the data.
+        width = max([len(c.name) for c in self.columns] + [len("column")]) + 2
         lines = [
             f"{self.path}: {self.n_rows} rows, {len(self.columns)} columns",
             "",
-            f"  {'column':<24}{'kind':<18}{'coverage':>10}  detail",
+            f"  {'column':<{width}}{'kind':<18}{'coverage':>10}  detail",
         ]
         for column in self.columns:
             lines.append(
-                f"  {column.name:<24}{column.kind:<18}{column.coverage:>9.0%}  {column.detail}"
+                f"  {column.name:<{width}}{column.kind:<18}{column.coverage:>9.0%}  {column.detail}"
             )
 
         lines += ["", "what this file supports today:"]
@@ -111,6 +113,18 @@ class Diagnosis:
             lines += ["", "suggested next steps:"]
             lines += [f"  {i}. {step}" for i, step in enumerate(self.recommendations, start=1)]
         return "\n".join(lines)
+
+
+def _flat_paths(row: Mapping[str, Any], prefix: str = "", depth: int = 3) -> list[str]:
+    """Leaf paths of a row, so nested JSON from an eval harness profiles like a table."""
+    out: list[str] = []
+    for key, value in row.items():
+        path = f"{prefix}{key}"
+        if isinstance(value, Mapping) and depth > 1:
+            out.extend(_flat_paths(value, f"{path}.", depth - 1))
+        else:
+            out.append(path)
+    return out
 
 
 def _classify(name: str, raw: list[Any]) -> ColumnProfile:
@@ -228,8 +242,8 @@ def diagnose(path: str | Path, *, alpha: float = 0.05) -> Diagnosis:
         tests/test_doctor.py::test_diagnose_says_what_is_blocked_without_human_labels
     """
     rows = read_rows(path)
-    names = list(rows[0])
-    columns = tuple(_classify(name, [row.get(name) for row in rows]) for name in names)
+    names = _flat_paths(rows[0])
+    columns = tuple(_classify(name, [get_field(row, name) for row in rows]) for name in names)
 
     judges = tuple(c.name for c in columns if c.kind == "verdict")
     golds = tuple(c.name for c in columns if c.kind == "sparse_verdict")
@@ -257,13 +271,13 @@ def diagnose(path: str | Path, *, alpha: float = 0.05) -> Diagnosis:
         blocked.append(("everything", "no column looks like a judge verdict"))
 
     if judges and golds:
-        judge_values = _to_binary([row.get(judges[0]) for row in rows])
+        judge_values = _to_binary([get_field(row, judges[0]) for row in rows])
         gold_positions = [
             i
             for i, row in enumerate(rows)
-            if str(row.get(golds[0])).strip().lower() not in _MISSING
+            if str(get_field(row, golds[0])).strip().lower() not in _MISSING
         ]
-        gold_values = _to_binary([rows[i].get(golds[0]) for i in gold_positions])
+        gold_values = _to_binary([get_field(rows[i], golds[0]) for i in gold_positions])
         n_gold = len(gold_positions)
 
         available.append(
@@ -279,7 +293,7 @@ def diagnose(path: str | Path, *, alpha: float = 0.05) -> Diagnosis:
 
         covariates = {
             name: np.asarray(
-                [float(rows[i].get(name, 0.0) or 0.0) for i in gold_positions], dtype=float
+                [float(get_field(rows[i], name) or 0.0) for i in gold_positions], dtype=float
             )
             for name in numerics
         }

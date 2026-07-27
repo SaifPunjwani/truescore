@@ -90,7 +90,7 @@ what the judge appears to be biased by:
 The rest of the commands:
 
 ```sh
-truescore audit   results.csv --judge judge_passed --gold human_passed --markdown report.md
+truescore audit   results.csv --judge judge_passed --gold human_passed --html report.html
 truescore compare results.csv --judge-a v4 --judge-b v3 --gold-a v4_human --gold-b v3_human
 truescore slices  results.csv --by segment --judge-a v4 --gold-a v4_human --judge-b v3 --gold-b v3_human
 truescore drift   anchor.csv  --baseline judge_may --current judge_june --gold human_passed
@@ -100,6 +100,20 @@ truescore plan    --n-total 4000 --target 0.03 --sensitivity 0.97 --specificity 
 
 Exit codes: 0 means nothing found, 2 means a finding, 1 means it couldn't run. They're
 different so a CI job can fail on drift without also failing on a typo in a filename.
+
+### Nested output from eval harnesses
+
+Column names can be dotted paths, so output from promptfoo, lm-eval-harness or your own
+harness works without reshaping:
+
+```sh
+truescore audit run.jsonl \
+    --judge gradingResult.pass \
+    --gold human \
+    --covariate response.tokenUsage.completion
+```
+
+`truescore doctor` flattens nested JSON when it profiles, so it will show you the paths.
 
 From Python:
 
@@ -181,7 +195,7 @@ nothing ever returns a NaN. Any input either gives a finite result or raises `Va
 That found three real bugs before release, including one where a near-deterministic slice
 got an interval with 7.7% coverage.
 
-602 tests. `mypy --strict`. numpy and scipy are the only dependencies.
+611 tests. `mypy --strict`. numpy and scipy are the only dependencies.
 
 Derivations, assumptions, and known limits are in [`docs/methods/`](docs/methods/).
 

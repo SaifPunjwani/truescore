@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import csv
 import json
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -24,7 +24,7 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
-__all__ = ["LabelSet", "load_labels", "read_rows"]
+__all__ = ["LabelSet", "get_field", "load_labels", "read_rows"]
 
 _TRUE_TOKENS = frozenset({"1", "true", "t", "yes", "y", "pass", "passed", "correct", "good"})
 _FALSE_TOKENS = frozenset({"0", "false", "f", "no", "n", "fail", "failed", "incorrect", "bad"})
@@ -139,7 +139,7 @@ def read_rows(path: str | Path) -> list[dict[str, Any]]:
 
 
 def _is_missing(value: Any) -> bool:
-    if value is None:
+    if value is None or value is _MISSING_SENTINEL:
         return True
     if isinstance(value, float) and np.isnan(value):
         return True
@@ -180,9 +180,66 @@ def _parse_number(value: Any, *, column: str, row_number: int) -> float:
         ) from error
 
 
+_MISSING_SENTINEL = object()
+
+
+def get_field(row: Mapping[str, Any], path: str) -> Any:
+    """Read a field from a row, following dots into nested objects and lists.
+
+    Eval harnesses write nested JSON. promptfoo puts the verdict at
+    ``gradingResult.pass``; other tools nest one or two levels deeper, sometimes through a
+    list. Rather than making every user flatten their output first, a column name here may
+    be a dotted path: ``gradingResult.pass``, ``scores.0.value``, ``metrics.accuracy``.
+
+    A plain name with no dots is looked up directly, so ordinary CSV columns keep working
+    even if they contain dots in their header.
+
+    Args:
+        row: One row of the file.
+        path: A column name, or a dotted path into nested structures.
+
+    Returns:
+        The value, or a sentinel meaning "absent" that callers treat as missing.
+
+    References:
+        tests/test_io.py::test_dotted_paths_read_nested_json
+    """
+    if path in row:
+        return row[path]
+    current: Any = row
+    for part in path.split("."):
+        if isinstance(current, Mapping):
+            if part not in current:
+                return _MISSING_SENTINEL
+            current = current[part]
+        elif isinstance(current, (list, tuple)):
+            try:
+                current = current[int(part)]
+            except (ValueError, IndexError):
+                return _MISSING_SENTINEL
+        else:
+            return _MISSING_SENTINEL
+    return current
+
+
+def _available_paths(row: Mapping[str, Any], prefix: str = "", depth: int = 3) -> list[str]:
+    """Paths a user could plausibly mean, for the error message when one is wrong."""
+    found: list[str] = []
+    for key, value in row.items():
+        path = f"{prefix}{key}"
+        if isinstance(value, Mapping) and depth > 1:
+            found.extend(_available_paths(value, f"{path}.", depth - 1))
+        elif isinstance(value, (list, tuple)) and value and isinstance(value[0], Mapping):
+            if depth > 1:
+                found.extend(_available_paths(value[0], f"{path}.0.", depth - 1))
+        else:
+            found.append(path)
+    return found
+
+
 def _require_column(rows: Sequence[dict[str, Any]], column: str) -> None:
-    if column not in rows[0]:
-        available = ", ".join(sorted(rows[0])) or "(none)"
+    if get_field(rows[0], column) is _MISSING_SENTINEL:
+        available = ", ".join(sorted(_available_paths(rows[0]))[:25]) or "(none)"
         raise ValueError(f"column {column!r} not found; available columns: {available}")
 
 
@@ -230,7 +287,7 @@ def load_labels(
     _require_column(rows, judge)
     judge_values = []
     for number, row in enumerate(rows, start=1):
-        value = row.get(judge)
+        value = get_field(row, judge)
         if _is_missing(value):
             raise ValueError(
                 f"row {number}, column {judge!r}: the judge verdict is missing. Every "
@@ -244,7 +301,7 @@ def load_labels(
     if gold is not None:
         _require_column(rows, gold)
         for position, (number, row) in enumerate(zip(range(1, len(rows) + 1), rows, strict=True)):
-            value = row.get(gold)
+            value = get_field(row, gold)
             if _is_missing(value):
                 continue
             gold_values.append(_parse_verdict(value, column=gold, row_number=number))
@@ -259,7 +316,7 @@ def load_labels(
     for name in covariates:
         _require_column(rows, name)
         values = [
-            _parse_number(row.get(name), column=name, row_number=number)
+            _parse_number(get_field(row, name), column=name, row_number=number)
             for number, row in enumerate(rows, start=1)
         ]
         covariate_arrays[name] = np.asarray(values, dtype=float)
@@ -267,7 +324,7 @@ def load_labels(
     ids = None
     if id_column is not None:
         _require_column(rows, id_column)
-        ids = np.asarray([str(row.get(id_column)) for row in rows])
+        ids = np.asarray([str(get_field(row, id_column)) for row in rows])
 
     return LabelSet(
         judge=judge_array,

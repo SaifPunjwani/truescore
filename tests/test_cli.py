@@ -265,3 +265,22 @@ def test_slices_estimates_when_only_one_system_is_given(
     assert code == EXIT_OK
     assert "corrected" in out
     assert "judge said" in out
+
+
+def test_audit_writes_an_html_report(tmp_path: Path) -> None:
+    html_path = tmp_path / "report.html"
+    main(
+        [
+            "audit",
+            str(DATA / "support_eval.csv"),
+            "--judge",
+            "judge_passed",
+            "--gold",
+            "human_passed",
+            "--html",
+            str(html_path),
+        ]
+    )
+    html = html_path.read_text(encoding="utf-8")
+    assert html.startswith("<!DOCTYPE html>")
+    assert "Corrected (use this)" in html

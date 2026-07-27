@@ -156,3 +156,47 @@ def test_report_requires_a_valid_alpha() -> None:
     )
     with pytest.raises(ValueError, match="alpha must lie"):
         build_report(trial.judge, trial.gold, trial.gold_index, alpha=1.5)
+
+
+def test_html_report_is_self_contained_and_escaped() -> None:
+    """A report gets emailed and opened years later, so it must not fetch anything.
+
+    It also has to escape whatever the caller passed as a name: a report is a document,
+    not a template.
+    """
+    rng = np.random.default_rng(80)
+    trial = simulate_trial(
+        rng, n_total=800, n_gold=120, true_rate=0.7, sensitivity=0.95, specificity=0.6
+    )
+    report = build_report(
+        trial.judge,
+        trial.gold,
+        trial.gold_index,
+        system_name='<script>alert("x")</script>',
+        timestamp=FIXED_TIMESTAMP,
+    )
+    html = report.to_html()
+
+    assert html.startswith("<!DOCTYPE html>")
+    for external in ("http://", "https://", "<script", "src="):
+        assert external not in html, f"report should not reference {external!r}"
+    assert "&lt;script&gt;" in html, "the system name must be escaped"
+    assert "Corrected (use this)" in html
+    assert "What this report does not establish" in html
+
+
+def test_html_report_includes_optional_sections() -> None:
+    rng = np.random.default_rng(81)
+    trial = simulate_trial(
+        rng, n_total=900, n_gold=200, true_rate=0.6, sensitivity=0.9, specificity=0.7
+    )
+    lengths = rng.uniform(50.0, 500.0, 200)
+    html = build_report(
+        trial.judge,
+        trial.gold,
+        trial.gold_index,
+        covariates={"length": lengths},
+        timestamp=FIXED_TIMESTAMP,
+    ).to_html()
+    assert "Judge quality" in html
+    assert "Judge bias" in html
