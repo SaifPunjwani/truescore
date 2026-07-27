@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Saif Punjwani
 """What is the true score, given an imperfect judge?
 
 A judge label is a cheap, biased measurement of the quantity you care about. Averaging

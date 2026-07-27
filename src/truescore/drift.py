@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Saif Punjwani
 """Did my judge change under me?
 
 Judges are usually hosted models behind a version-less endpoint. When the provider

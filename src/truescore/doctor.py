@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Saif Punjwani
 """Point this at your evaluation file and it will tell you what it can do.
 
 The hardest part of adopting a statistics library is not the statistics. It is the fifteen

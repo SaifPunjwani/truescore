@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>truescore — statistics for LLM-judged evaluations</title>
-<meta name="description" content="Your LLM judge is wrong in ways you haven't measured. truescore corrects the score, puts real confidence intervals on it, and tells you which segment actually regressed.">
+<title>truescore: statistics for LLM-judged evaluations</title>
+<meta name="description" content="Correct LLM-judge evaluation scores for judge error, with valid confidence intervals, per-segment analysis, and drift detection.">
 <meta property="og:title" content="truescore">
-<meta property="og:description" content="Your LLM judge is wrong in ways you haven't measured. truescore corrects the score and puts real intervals on it.">
+<meta property="og:description" content="Correct LLM-judge evaluation scores for judge error, with valid confidence intervals, per-segment analysis, and drift detection.">
 <meta property="og:type" content="website">
 <style>
   :root {
@@ -74,9 +74,9 @@
     <a href="https://github.com/SaifPunjwani/truescore/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/SaifPunjwani/truescore/actions/workflows/ci.yml/badge.svg"></a>
     <a href="https://github.com/SaifPunjwani/truescore/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
   </div>
-  <h1>truescore <span class="dim">— your judge is wrong, by a measurable amount</span></h1>
-  <p class="tagline">Statistics for LLM-judged evaluations: bias-corrected scores, real
-  confidence intervals, and comparisons that hold up.</p>
+  <h1>truescore</h1>
+  <p class="tagline">Statistics for LLM-judged evaluations: bias-corrected scores, valid
+  confidence intervals, and model comparisons that survive review.</p>
   <pre>pip install truescore
 truescore doctor your_eval_results.csv</pre>
   <div class="cta">
@@ -86,7 +86,7 @@ truescore doctor your_eval_results.csv</pre>
   </div>
 </header>
 
-<h2>The number on your dashboard</h2>
+<h2>Background</h2>
 
 <p>A support assistant, 4000 questions graded by an LLM judge, 600 of them also graded by a
 person. The data is simulated, so the real pass rate is known: <code>0.7140</code>.</p>
@@ -98,10 +98,11 @@ person. The data is simulated, so the real pass rate is known: <code>0.7140</cod
   <tr><td>human labels only</td><td class="num">0.7183</td><td class="num">[0.6810, 0.7528]</td><td class="good">yes, but wider</td></tr>
 </table>
 
-<p>The judge is 12 points high and its interval doesn't reach the true value. The corrected
-estimate does, and it's tighter than using the 600 human labels alone.</p>
+<p>The judge reports 12 points high and its interval stops short of the true value. The
+corrected interval contains it, and is narrower than the one from the 600 human labels
+alone.</p>
 
-<h2>Comparisons are worse</h2>
+<h2>Comparisons carry more error</h2>
 
 <table>
   <tr><th></th><th>v4 minus v3</th></tr>
@@ -110,18 +111,18 @@ estimate does, and it's tighter than using the 600 human labels alone.</p>
   <tr><td>actual</td><td class="num">+0.0900</td></tr>
 </table>
 
-<p>v4 really is better. But 7 of those 17 points come from the judge preferring longer
-answers, and v4's median answer is 197 tokens against v3's 99. Measured length bias:
-<code>+0.069</code> per 100 tokens, p = 1e-05.</p>
+<p>v4 is better, by about half what the judge reports. The gap traces to answer length:
+v4's median answer runs 197 tokens against v3's 99, and the judge's measured length bias is
+<code>+0.069</code> per 100 tokens (p = 1e-05).</p>
 
-<p>Slice the same data by support segment and the judge says all three improved. One
-regressed by 17 points, the one where answers got longest. Per-segment correction returns
-<code>-0.1659</code> against a planted truth of <code>-0.1663</code>.</p>
+<p>Split the same evaluation by support segment and the judge reports an improvement on
+all three. One regressed by 17 points, the one where answers grew longest. Per-segment
+correction returns <code>-0.1659</code> against a planted truth of <code>-0.1663</code>.</p>
 
-<h2>Watching a dashboard doesn't help</h2>
+<h2>Repeated checks invalidate a fixed-sample interval</h2>
 
-<p>A 95% interval is valid at one sample size you fixed in advance. Check it repeatedly as
-data arrives and it isn't 95% anymore. Over 300 simulated healthy streams:</p>
+<p>A 95% interval is valid at a sample size chosen in advance. Inspected repeatedly as
+data arrives, it is not. Measured over 300 simulated healthy streams:</p>
 
 <table>
   <tr><th>checked after every observation</th><th>false alarms</th></tr>
@@ -129,7 +130,7 @@ data arrives and it isn't 95% anymore. Over 300 simulated healthy streams:</p>
   <tr><td>truescore confidence sequence</td><td class="good">0.3%</td></tr>
 </table>
 
-<h2>Start here</h2>
+<h2>Quick start</h2>
 
 <p><code>doctor</code> reads your file, works out what your columns are, and tells you what
 it can compute and what's blocked:</p>
@@ -158,18 +159,19 @@ what the judge appears to be biased by:
     command: drift
     args: anchor.csv --baseline judge_pinned --current judge_today --gold human</pre>
 
-<p>Exit codes are 0 for nothing found, 2 for a finding, 1 for couldn't run. A job can fail
-on judge drift without also failing on a bad filename.</p>
+<p>Exit codes are 0 for no finding, 2 for a finding, and 1 for a failure to run. A CI job
+can fail on judge drift without also failing on a malformed file.</p>
 
-<h2>How many human labels does this need?</h2>
+<h2>Human labels</h2>
 
-<p>Some, for the correction. You can't calibrate an instrument without something to
-calibrate it against.</p>
+<p>The correction requires trusted labels on a subset of examples. Calibrating a
+measurement instrument requires a reference to calibrate against.</p>
 
-<p>About half the library needs none: regression monitoring, contamination testing,
-position-bias detection and label planning all run on judge output alone. For the rest it's
-a few hundred labels, you label once and reuse across releases, and you may already have
-human verdicts in your database (escalations, thumbs-down, refunds, repeat contacts).</p>
+<p>Roughly half the library runs without any: regression monitoring, contamination testing,
+position-bias detection and label planning use judge output alone. Where labels are needed
+it is a few hundred, they serve every future release against that evaluation set, and many
+teams already hold implicit human verdicts (escalations, thumbs-down, refunds, repeat
+contacts).</p>
 
 <p>The library prices it before you spend anything:</p>
 
@@ -177,18 +179,18 @@ human verdicts in your database (escalations, thumbs-down, refunds, repeat conta
   +/-0.03:   670 labels (without the judge:   879)
   +/-0.02:  1644 labels (without the judge:  1978)</pre>
 
-<h2>Why trust it</h2>
+<h2>Validation</h2>
 
-<p>Every interval estimator has a coverage test: simulate from a known truth hundreds of
-times and check the 95% interval covers about 95% of the time. The confidence sequence is
-checked over whole trajectories.</p>
+<p>Every interval estimator carries a coverage test: simulate from a known ground truth
+several hundred times and confirm the 95% interval covers about 95% of the time. Confidence
+sequences are checked over whole trajectories.</p>
 
-<p>The suite also fuzzes every public function and requires that nothing ever returns a
-NaN. Any input gives a finite result or raises. That found three real bugs before release,
-including a near-deterministic slice whose interval had 7.7% coverage.</p>
+<p>The suite fuzzes every public function under one rule: any input produces a finite
+result or raises. That pass found three defects before the first release, including a
+near-deterministic slice whose interval covered 7.7% of the time.</p>
 
-<p class="note">602 tests. mypy --strict. numpy and scipy are the only dependencies. It
-never calls a model.</p>
+<p class="note">622 tests. mypy --strict. numpy and scipy are the only dependencies.
+truescore never calls a model.</p>
 
 <footer>
   Apache-2.0 &middot;

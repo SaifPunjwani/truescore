@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Saif Punjwani
 """Input validation shared across truescore.
 
 Single source of error-message style. Every public function validates before computing,

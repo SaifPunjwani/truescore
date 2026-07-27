@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Saif Punjwani
 """Is system A actually better than system B?
 
 Model comparisons are almost always run on the *same* examples, which makes them paired.

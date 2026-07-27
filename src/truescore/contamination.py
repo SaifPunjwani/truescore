@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Saif Punjwani
 """Is my evaluation set inside my training data?
 
 A contaminated benchmark reports skill the model does not have, and the failure is

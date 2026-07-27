@@ -1,0 +1,11 @@
+truescore
+Copyright 2026 Saif Punjwani
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use
+this file except in compliance with the License. You may obtain a copy of the
+License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+This product includes no third-party source code. It depends on numpy and scipy
+at runtime, which are distributed separately under the BSD 3-Clause License.

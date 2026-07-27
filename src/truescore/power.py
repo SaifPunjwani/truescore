@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Saif Punjwani
 """How many labels do I need?
 
 Two planning questions, answered before spending money rather than after:

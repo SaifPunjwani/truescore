@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Saif Punjwani
 """The defensible artifact.
 
 A single object that records what was measured, on how many examples, with how many gold

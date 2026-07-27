@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Saif Punjwani
 """Which segment actually moved?
 
 "Is v4 better?" is never the last question. The next one is "better for whom?", because an

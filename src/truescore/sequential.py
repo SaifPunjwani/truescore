@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Saif Punjwani
 """Can I look at this number whenever I want?
 
 A fixed-sample confidence interval is valid at *one* pre-specified sample size. Eval

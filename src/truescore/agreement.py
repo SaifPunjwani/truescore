@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Saif Punjwani
 """How good is the judge?
 
 Agreement statistics between an automated judge and trusted (gold) labels, each with a

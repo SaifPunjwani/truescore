@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Saif Punjwani
 """What is the judge biased by?
 
 An overall agreement rate hides *structure* in the judge's errors. A judge that agrees

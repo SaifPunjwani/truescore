@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Saif Punjwani
 """Statistically valid evaluation for LLM-judged benchmarks.
 
 An LLM judge is a cheap, biased measurement instrument. Averaging its labels estimates

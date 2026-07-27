@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Saif Punjwani
 """Does this evaluation set look like production?
 
 Almost never. Evaluation sets are curated, and curation is not random sampling: they

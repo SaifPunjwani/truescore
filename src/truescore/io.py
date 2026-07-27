@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Saif Punjwani
 """Reading the files evaluation teams actually have.
 
 The shape of real eval output is one row per example: a judge verdict on every row, and a
