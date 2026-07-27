@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.6.0 — 2026-07-26
+
+### Added
+
+- **Nested field paths.** Column names may be dotted paths, so output from promptfoo,
+  lm-eval-harness or an in-house harness can be read where it lies:
+  `--judge gradingResult.pass`, `--covariate response.tokenUsage.completion`. `doctor`
+  flattens nested JSON when profiling and hands back commands carrying the paths. A flat
+  CSV header containing a dot is still looked up directly.
+- **`EvalReport.to_html` and `audit --html`.** A single self-contained file with no
+  external stylesheet, script or font, so a report survives being emailed and opened
+  later. Caller-supplied names are escaped.
+- **Graded rubric support.** `graded_agreement` and `quadratic_weighted_kappa` for judges
+  that emit a 1-5 score rather than pass/fail, where binary metrics do not apply and
+  unweighted agreement treats a 1-vs-5 disagreement the same as a 3-vs-4. Kappa is
+  verified against a hand-computed 3x3 confusion matrix. `doctor` now recognises a rubric
+  column and reports what a graded file supports.
+
 ## 0.5.0 — 2026-07-26
 
 First public release.

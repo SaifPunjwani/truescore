@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "truescore"
-version = "0.5.0"
+version = "0.6.0"
 description = "Statistically valid evaluation for LLM-judged benchmarks: bias-corrected scores, honest intervals, defensible comparisons"
 readme = "README.md"
 requires-python = ">=3.10"

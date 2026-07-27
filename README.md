@@ -129,7 +129,7 @@ print(report.summary())
 ### In CI
 
 ```yaml
-- uses: SaifPunjwani/truescore@v0.5.0
+- uses: SaifPunjwani/truescore@v0.6.0
   with:
     command: drift
     args: anchor.csv --baseline judge_pinned --current judge_today --gold human_passed
