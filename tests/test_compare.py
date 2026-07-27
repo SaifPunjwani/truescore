@@ -192,3 +192,95 @@ def test_benjamini_hochberg_matches_scipy() -> None:
 def test_comparison_rejects_mismatched_lengths() -> None:
     with pytest.raises(ValueError, match="same length"):
         mcnemar(np.array([1, 0, 1]), np.array([1, 0]))
+
+
+def test_ppi_compare_respects_clusters() -> None:
+    """A paired comparison on clustered data needs the same treatment as a single score.
+
+    Two systems evaluated over the same samples with several epochs each: the per-example
+    differences are correlated within a sample, so an unclustered comparison reports an
+    interval narrower than the data supports and a p-value smaller than it should be.
+    Measured against a true difference of zero, where any rejection is a false one.
+    """
+    rng = np.random.default_rng(7)
+    samples, epochs, labeled, reps = 200, 4, 60, 400
+    naive_rejections = clustered_rejections = 0
+    for _ in range(reps):
+        difficulty = rng.beta(2, 2, size=samples)
+        # Both systems are equally good, so every rejection below is a false positive.
+        gold_a = (rng.random((samples, epochs)) < difficulty[:, None]).astype(float)
+        gold_b = (rng.random((samples, epochs)) < difficulty[:, None]).astype(float)
+        noise_a = rng.random((samples, epochs)) < 0.15
+        noise_b = rng.random((samples, epochs)) < 0.15
+        judge_a = np.where(noise_a, 1.0 - gold_a, gold_a)
+        judge_b = np.where(noise_b, 1.0 - gold_b, gold_b)
+        groups = np.repeat(np.arange(samples), epochs)
+
+        chosen = rng.choice(samples, size=labeled, replace=False)
+        index = np.flatnonzero(np.isin(groups, chosen))
+        args = (
+            judge_a.ravel(),
+            judge_b.ravel(),
+            gold_a.ravel()[index],
+            gold_b.ravel()[index],
+            index,
+        )
+        naive_rejections += ppi_compare(*args).p_value < 0.05
+        clustered_rejections += ppi_compare(*args, clusters=groups).p_value < 0.05
+
+    assert clustered_rejections / reps <= 0.08, "false positive rate should sit near alpha"
+    assert clustered_rejections < naive_rejections, "declaring clusters must widen the test"
+
+
+def test_ppi_compare_reports_the_standard_error_it_used() -> None:
+    """The p-value and the interval have to come from the same standard error."""
+    rng = np.random.default_rng(2)
+    judge_a = rng.random(300).round()
+    judge_b = rng.random(300).round()
+    index = np.arange(0, 300, 3)
+
+    result = ppi_compare(judge_a, judge_b, judge_a[index], judge_b[index], index)
+
+    # A perfect judge leaves no residual error, so the difference is measured exactly.
+    assert result.p_value >= 0.0
+    assert "ppi++ paired difference" in result.method
+
+
+def test_cluster_bootstrap_controls_false_positives() -> None:
+    """Resampling rows from clustered data is as wrong as an unclustered variance.
+
+    Two identical systems evaluated over the same samples with several epochs each. Every
+    rejection is false by construction, so the row bootstrap's rate is a direct read of how
+    much the correlation is being ignored.
+    """
+    rng = np.random.default_rng(4)
+    samples, epochs, reps = 150, 5, 400
+    by_row = by_cluster = 0
+    for rep in range(reps):
+        difficulty = rng.beta(2, 2, size=samples)
+        a = (rng.random((samples, epochs)) < difficulty[:, None]).astype(float)
+        b = (rng.random((samples, epochs)) < difficulty[:, None]).astype(float)
+        groups = np.repeat(np.arange(samples), epochs)
+
+        rows = paired_bootstrap(a.ravel(), b.ravel(), n_bootstrap=400, seed=rep)
+        clustered = paired_bootstrap(
+            a.ravel(), b.ravel(), n_bootstrap=400, seed=rep, clusters=groups
+        )
+        by_row += rows.p_value < 0.05
+        by_cluster += clustered.p_value < 0.05
+
+    assert by_cluster / reps <= 0.09, "the cluster bootstrap should sit near alpha"
+    assert by_cluster <= by_row
+
+
+def test_cluster_bootstrap_reduces_to_the_row_bootstrap_on_singletons() -> None:
+    """One observation per cluster is the independent case and must agree closely."""
+    rng = np.random.default_rng(6)
+    a, b = rng.random(200), rng.random(200)
+
+    rows = paired_bootstrap(a, b, n_bootstrap=4000, seed=1)
+    singletons = paired_bootstrap(a, b, n_bootstrap=4000, seed=1, clusters=np.arange(200))
+
+    assert singletons.difference == pytest.approx(rows.difference)
+    assert singletons.low == pytest.approx(rows.low, abs=0.01)
+    assert singletons.high == pytest.approx(rows.high, abs=0.01)

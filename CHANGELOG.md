@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.7.2 - 2026-07-27
+
+Completes the clustering work in 0.7.1, which fixed `audit` and left the other commands
+with the problem it had just named.
+
+### Added
+
+- **`clusters=` on `ppi_compare` and `paired_bootstrap`, `--cluster-column` on `compare`.**
+  A paired comparison over correlated rows understates its variance exactly as a single
+  score does. The bootstrap resamples whole clusters rather than rows, which is the unit
+  the sampling design actually draws; on singleton clusters it reduces to the row bootstrap.
+- **`Estimate.standard_error`.** Callers were recovering it by dividing the half width by a
+  normal quantile, which stopped being right the moment clustered intervals began using a t
+  quantile. `ppi_compare` now takes the standard error from the estimator that computed it,
+  so its p-value and its interval cannot disagree.
+- **`compare` swaps McNemar for the cluster bootstrap** when a grouping is declared.
+  McNemar conditions on discordant pairs assumed independent, which they are not once
+  several rows describe one example, so the uncorrected line would otherwise have been the
+  only wrong number left in the output.
+
+### Changed
+
+- **Every command that opens a file now shares one reader**, so format detection and the
+  repeated-identifier warning reach `compare`, `slices` and `drift` rather than only
+  `audit`. A warning that depends on which subcommand you picked is worse than none,
+  because its silence means nothing.
+- The straddling-cluster error names the three ways out instead of two, since averaging
+  each cluster to one row is what most people want and it was the one left unsaid.
+
 ## 0.7.1 - 2026-07-27
 
 ### Fixed

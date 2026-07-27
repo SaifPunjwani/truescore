@@ -22,6 +22,14 @@ mypy
 All four have to pass. There are no known-flaky tests. If a seeded test fails
 intermittently, that's a bug, please report it.
 
+CI runs the matrix on Python 3.10 and 3.13. Numpy's type stubs differ enough between the
+versions those two resolve that `mypy` can pass on one and fail on the other, so check the
+older one before pushing:
+
+```sh
+uv run --python 3.10 --extra dev mypy src/truescore
+```
+
 ## What a change needs
 
 **New estimator**: a derivation in `docs/methods/` with the algebra written out, and a

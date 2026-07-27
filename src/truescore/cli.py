@@ -39,7 +39,7 @@ import numpy as np
 from truescore import __version__
 from truescore.adapters import read_eval
 from truescore.agreement import judge_agreement
-from truescore.compare import mcnemar, ppi_compare
+from truescore.compare import mcnemar, paired_bootstrap, ppi_compare
 from truescore.contamination import combine_shards, exchangeability_test
 from truescore.doctor import diagnose
 from truescore.drift import judge_drift
@@ -105,15 +105,14 @@ def _load(args: argparse.Namespace) -> LabelSet:
         rows = joined.rows
         gold = joined.gold_column
 
-    labels = load_labels(
+    _warn_if_clustered(rows, id_column, getattr(args, "cluster_column", None))
+    return load_labels(
         rows,
         judge=judge,
         gold=gold,
         id_column=id_column,
         covariates=getattr(args, "covariate", None) or (),
     )
-    _warn_if_clustered(rows, id_column, getattr(args, "cluster_column", None))
-    return labels
 
 
 def _warn_if_clustered(
@@ -151,11 +150,6 @@ def _cmd_audit(args: argparse.Namespace) -> int:
     print(labels.summary())
     print()
 
-    clusters = None
-    if getattr(args, "cluster_column", None):
-        rows = read_eval(args.file).rows
-        clusters = np.asarray([str(get_field(row, args.cluster_column)) for row in rows])
-
     report = build_report(
         labels.judge,
         labels.gold,
@@ -164,7 +158,7 @@ def _cmd_audit(args: argparse.Namespace) -> int:
         system_name=args.system_name,
         alpha=args.alpha,
         covariates=labels.covariates_on_gold() or None,
-        clusters=clusters,
+        clusters=_clusters_for(args, read_eval(args.file).rows),
     )
     print(report.summary())
 
@@ -192,15 +186,50 @@ def _cmd_audit(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _rows_for(args: argparse.Namespace) -> list[dict[str, Any]]:
+    """Read the file a command was pointed at, recognizing the format and checking shape.
+
+    Every command that opens a file goes through here. The clustered-data warning in
+    particular has to fire everywhere: a file with several rows per example produces
+    intervals that are too narrow in `compare` and `slices` for exactly the reason it does
+    in `audit`, and a warning that depends on which subcommand you picked is worse than
+    none, because its silence means nothing.
+    """
+    found = read_eval(args.file)
+    if found.tool != "generic":
+        print(found.summary())
+        print()
+    _warn_if_clustered(
+        found.rows,
+        getattr(args, "id_column", None) or found.id_column,
+        getattr(args, "cluster_column", None),
+    )
+    return found.rows
+
+
+def _clusters_for(args: argparse.Namespace, rows: Sequence[Mapping[str, Any]]) -> Any:
+    column = getattr(args, "cluster_column", None)
+    if not column:
+        return None
+    return np.asarray([str(get_field(row, column)) for row in rows])
+
+
 def _cmd_compare(args: argparse.Namespace) -> int:
-    rows = read_rows(args.file)
+    rows = _rows_for(args)
     a = load_labels(rows, judge=args.judge_a, gold=args.gold_a)
     b = load_labels(rows, judge=args.judge_b, gold=args.gold_b)
 
     print(f"comparing {args.judge_a} against {args.judge_b} on {a.n_total} shared examples")
     print()
 
-    naive = mcnemar(a.judge.astype(int), b.judge.astype(int), alpha=args.alpha)
+    clusters = _clusters_for(args, rows)
+    if clusters is None:
+        naive = mcnemar(a.judge.astype(int), b.judge.astype(int), alpha=args.alpha)
+    else:
+        # McNemar conditions on discordant pairs assumed independent, which they are not
+        # once several rows describe one example. The cluster bootstrap resamples whole
+        # examples instead, so the uncorrected line stays comparable to the corrected one.
+        naive = paired_bootstrap(a.judge, b.judge, alpha=args.alpha, clusters=clusters)
     print("as judged (uncorrected):")
     print(naive.summary())
 
@@ -211,7 +240,15 @@ def _cmd_compare(args: argparse.Namespace) -> int:
                 "the two gold columns must be labeled on the same rows for a paired "
                 "comparison of true scores"
             )
-        corrected = ppi_compare(a.judge, b.judge, a.gold, b.gold, a.gold_index, alpha=args.alpha)
+        corrected = ppi_compare(
+            a.judge,
+            b.judge,
+            a.gold,
+            b.gold,
+            a.gold_index,
+            alpha=args.alpha,
+            clusters=clusters,
+        )
         print()
         print("corrected for judge error:")
         print(corrected.summary())
@@ -231,7 +268,7 @@ def _cmd_compare(args: argparse.Namespace) -> int:
 
 
 def _cmd_drift(args: argparse.Namespace) -> int:
-    rows = read_rows(args.file)
+    rows = _rows_for(args)
     baseline = load_labels(rows, judge=args.baseline)
     current = load_labels(rows, judge=args.current)
     gold = load_labels(rows, judge=args.gold)
@@ -350,7 +387,7 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
 
 
 def _cmd_slices(args: argparse.Namespace) -> int:
-    rows = read_rows(args.file)
+    rows = _rows_for(args)
     segments = np.asarray([str(row[args.by]) for row in rows])
 
     if args.judge_b:
@@ -455,6 +492,11 @@ def _build_parser() -> argparse.ArgumentParser:
     compare.add_argument("--judge-b", required=True)
     compare.add_argument("--gold-a", help="human verdicts for system A")
     compare.add_argument("--gold-b", help="human verdicts for system B")
+    compare.add_argument("--id-column", help="column of example identifiers")
+    compare.add_argument(
+        "--cluster-column",
+        help="column grouping correlated rows, such as several epochs of one example",
+    )
     add_common(compare)
     compare.set_defaults(func=_cmd_compare)
 

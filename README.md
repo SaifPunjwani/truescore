@@ -147,7 +147,9 @@ grouping column:
 truescore audit results.csv --judge passed --gold human --cluster-column conversation_id
 ```
 
-`audit` warns when the identifier column repeats and no grouping was declared.
+`audit`, `compare`, `slices` and `drift` all warn when the identifier column repeats and no
+grouping was declared. `compare` also swaps McNemar for a cluster bootstrap when you give
+it a grouping, since McNemar assumes the discordant pairs are independent.
 
 ### Human labels in a separate file
 
@@ -182,7 +184,7 @@ print(report.summary())
 ### GitHub Actions
 
 ```yaml
-- uses: SaifPunjwani/truescore@v0.7.1
+- uses: SaifPunjwani/truescore@v0.7.2
   with:
     command: drift
     args: anchor.csv --baseline judge_pinned --current judge_today --gold human_passed
@@ -250,7 +252,7 @@ input produces a finite result or raises `ValueError`, never a silent NaN. That 
 three defects before the first release, including a near-deterministic slice whose interval
 covered 7.7% of the time.
 
-659 tests, `mypy --strict`, CI on Linux and macOS across Python 3.10 and 3.13.
+663 tests, `mypy --strict`, CI on Linux and macOS across Python 3.10 and 3.13.
 
 ## Findings
 

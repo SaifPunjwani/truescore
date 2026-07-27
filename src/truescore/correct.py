@@ -75,6 +75,10 @@ class Estimate:
         assumptions: Conditions the estimate relies on. Written out because an interval
             without its assumptions is not evidence.
         lambda_: PPI tuning parameter, when applicable.
+        standard_error: Standard error of the point estimate, where the estimator has one.
+            Recorded so a caller can build its own test without dividing the half width by
+            a quantile it has to guess: that guess is wrong the moment the interval used a
+            t quantile for clustered data rather than a normal one.
     """
 
     point: float
@@ -86,6 +90,7 @@ class Estimate:
     n_gold: int
     assumptions: tuple[str, ...] = field(default_factory=tuple)
     lambda_: float | None = None
+    standard_error: float | None = None
 
     @property
     def half_width(self) -> float:
@@ -388,8 +393,10 @@ def ppi_estimate(
             raise ValueError(
                 f"{straddling.size} cluster(s) have some examples labeled and some not. "
                 "The two terms of the estimator are only independent when the labeled and "
-                "unlabeled sets share no cluster, so label whole clusters at a time, or "
-                "drop the unlabeled remainder of a partly-labeled cluster."
+                "unlabeled sets share no cluster. Three ways out: label whole clusters at "
+                "a time, average each cluster to one row before estimating (the usual "
+                "choice for repeated epochs of one sample), or drop the unlabeled "
+                "remainder of a partly-labeled cluster."
             )
         variance = _clustered_mean_variance(
             rectifier, _cluster_codes("clusters", labeled_codes, labeled_codes.shape[0])
@@ -442,6 +449,7 @@ def ppi_estimate(
             "prefer gold_only_estimate, whose interval is exact",
         ),
         lambda_=lam,
+        standard_error=float(np.sqrt(variance)),
     )
 
 

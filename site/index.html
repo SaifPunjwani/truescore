@@ -196,7 +196,7 @@ what the judge appears to be biased by:
 
 <h2>In CI</h2>
 
-<pre>- uses: SaifPunjwani/truescore@v0.7.1
+<pre>- uses: SaifPunjwani/truescore@v0.7.2
   with:
     command: drift
     args: anchor.csv --baseline judge_pinned --current judge_today --gold human</pre>
@@ -231,7 +231,7 @@ sequences are checked over whole trajectories.</p>
 result or raises. That pass found three defects before the first release, including a
 near-deterministic slice whose interval covered 7.7% of the time.</p>
 
-<p class="note">659 tests. mypy --strict. numpy and scipy are the only dependencies.
+<p class="note">663 tests. mypy --strict. numpy and scipy are the only dependencies.
 truescore never calls a model.</p>
 
 <footer>

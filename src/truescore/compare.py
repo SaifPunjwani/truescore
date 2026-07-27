@@ -37,7 +37,7 @@ from truescore._validation import (
     check_same_length,
     to_1d_array,
 )
-from truescore.correct import ppi_estimate
+from truescore.correct import _cluster_codes, ppi_estimate
 
 __all__ = [
     "ComparisonResult",
@@ -172,6 +172,7 @@ def paired_bootstrap(
     alpha: float = 0.05,
     n_bootstrap: int = 10000,
     seed: int = 0,
+    clusters: npt.ArrayLike | None = None,
 ) -> ComparisonResult:
     """Paired bootstrap for the difference in means of any per-example metric.
 
@@ -184,6 +185,11 @@ def paired_bootstrap(
         alpha: Significance level.
         n_bootstrap: Number of resamples.
         seed: Seed, so a report is reproducible.
+        clusters: Group label per example. Supplying it resamples whole clusters rather
+            than rows, which is the resampling unit that matches the sampling design when
+            observations arrive in correlated groups. Resampling rows from clustered data
+            treats the correlation as if it were not there and returns an interval too
+            narrow, the same way an unclustered variance does.
 
     Returns:
         The comparison, with a percentile interval and a bootstrap p-value obtained by
@@ -191,6 +197,7 @@ def paired_bootstrap(
 
     References:
         tests/test_compare.py::test_paired_bootstrap_covers_at_nominal_rate
+        tests/test_compare.py::test_cluster_bootstrap_controls_false_positives
     """
     check_alpha(alpha)
     arr_a = to_1d_array("a", np.asarray(a, dtype=float))
@@ -200,8 +207,26 @@ def paired_bootstrap(
     diffs = arr_a - arr_b
     n = diffs.shape[0]
     rng = np.random.default_rng(seed)
-    draws = rng.integers(0, n, size=(n_bootstrap, n))
-    resampled = diffs[draws].mean(axis=1)
+    if clusters is None:
+        draws = rng.integers(0, n, size=(n_bootstrap, n))
+        resampled = diffs[draws].mean(axis=1)
+        method = "paired bootstrap (percentile)"
+    else:
+        codes = _cluster_codes("clusters", clusters, n)
+        order = np.argsort(codes, kind="stable")
+        sorted_diffs = diffs[order]
+        boundaries = np.searchsorted(codes[order], np.arange(int(codes.max()) + 2))
+        groups = [
+            sorted_diffs[boundaries[g] : boundaries[g + 1]] for g in range(len(boundaries) - 1)
+        ]
+        groups = [g for g in groups if g.size]
+        if len(groups) < 2:
+            raise ValueError(f"cluster bootstrap needs at least 2 clusters; got {len(groups)}")
+        sums = np.array([g.sum() for g in groups])
+        sizes = np.array([g.size for g in groups], dtype=float)
+        picks = rng.integers(0, len(groups), size=(n_bootstrap, len(groups)))
+        resampled = sums[picks].sum(axis=1) / sizes[picks].sum(axis=1)
+        method = f"cluster bootstrap (percentile, {len(groups)} clusters)"
 
     low, high = np.percentile(resampled, [100 * alpha / 2, 100 * (1 - alpha / 2)])
     # Two-sided bootstrap p-value: twice the smaller tail mass on the far side of zero.
@@ -214,7 +239,7 @@ def paired_bootstrap(
         high=float(high),
         level=1.0 - alpha,
         p_value=p_value,
-        method="paired bootstrap (percentile)",
+        method=method,
         n_pairs=n,
     )
 
@@ -280,6 +305,7 @@ def ppi_compare(
     gold_index: npt.ArrayLike,
     *,
     alpha: float = 0.05,
+    clusters: npt.ArrayLike | None = None,
 ) -> ComparisonResult:
     """Compare two systems on their *true* scores rather than their judge scores.
 
@@ -296,12 +322,17 @@ def ppi_compare(
         gold_b: Gold labels for system B on the labeled subset.
         gold_index: Positions carrying gold labels.
         alpha: Significance level.
+        clusters: Group label per example, when observations are not independent. Several
+            epochs of one sample, or several turns of one conversation. Omitting it on
+            clustered data produces an interval narrower than the data supports and a
+            p-value smaller than it should be.
 
     Returns:
         The comparison of true scores.
 
     References:
         tests/test_compare.py::test_ppi_compare_corrects_a_judge_biased_toward_one_system
+        tests/test_compare.py::test_ppi_compare_respects_clusters
     """
     check_alpha(alpha)
     ja = to_1d_array("judge_a", np.asarray(judge_a, dtype=float))
@@ -311,8 +342,11 @@ def ppi_compare(
     check_same_length("judge_a", ja, "judge_b", jb)
     check_same_length("gold_a", ga, "gold_b", gb)
 
-    estimate = ppi_estimate(ja - jb, ga - gb, gold_index, alpha=alpha)
-    standard_error = estimate.half_width / float(stats.norm.ppf(1.0 - alpha / 2.0))
+    estimate = ppi_estimate(ja - jb, ga - gb, gold_index, alpha=alpha, clusters=clusters)
+    # The estimator reports its own standard error. Recovering it by dividing the half
+    # width by a normal quantile was right only while every interval used one, and stopped
+    # being right the moment clustered intervals started using a t quantile instead.
+    standard_error = estimate.standard_error or 0.0
     p_value = (
         float(2.0 * stats.norm.sf(abs(estimate.point) / standard_error))
         if standard_error > 0.0
@@ -324,7 +358,7 @@ def ppi_compare(
         high=estimate.high,
         level=1.0 - alpha,
         p_value=p_value,
-        method="ppi++ paired difference",
+        method="ppi++ paired difference" + ("" if clusters is None else " (cluster-robust)"),
         n_pairs=ja.shape[0],
     )
 
