@@ -110,8 +110,11 @@ def _cluster_codes(name: str, clusters: npt.ArrayLike, expected: int) -> npt.NDA
             f"{name} has {arr.shape[0]} entries but there are {expected} observations; "
             "every observation needs to say which cluster it belongs to"
         )
-    _, codes = np.unique(arr, return_inverse=True)
-    return codes
+    # np.unique's return_inverse overload is typed differently across the numpy versions
+    # this package supports, so the result is narrowed here rather than at each call site.
+    # ravel() guards the same versions' disagreement over the inverse array's shape.
+    codes = np.unique(arr, return_inverse=True)[1]
+    return np.asarray(codes, dtype=np.int64).ravel()
 
 
 def _clustered_mean_variance(values: npt.NDArray[Any], codes: npt.NDArray[Any]) -> float:
@@ -388,13 +391,15 @@ def ppi_estimate(
                 "unlabeled sets share no cluster, so label whole clusters at a time, or "
                 "drop the unlabeled remainder of a partly-labeled cluster."
             )
-        labeled_groups = np.unique(labeled_codes, return_inverse=True)[1]
-        variance = _clustered_mean_variance(rectifier, labeled_groups)
+        variance = _clustered_mean_variance(
+            rectifier, _cluster_codes("clusters", labeled_codes, labeled_codes.shape[0])
+        )
         groups_labeled = int(np.unique(labeled_codes).size)
         groups_unlabeled = int(np.unique(unlabeled_codes).size)
         if lam > 0.0:
             variance += (lam**2) * _clustered_mean_variance(
-                judge_unlabeled, np.unique(unlabeled_codes, return_inverse=True)[1]
+                judge_unlabeled,
+                _cluster_codes("clusters", unlabeled_codes, unlabeled_codes.shape[0]),
             )
         # Two variance terms with different cluster counts. Taking the smaller count is
         # conservative and avoids a Satterthwaite approximation nobody would check.
