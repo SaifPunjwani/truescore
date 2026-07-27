@@ -100,6 +100,48 @@ def _z(alpha: float) -> float:
     return float(stats.norm.ppf(1.0 - alpha / 2.0))
 
 
+def _cluster_codes(name: str, clusters: npt.ArrayLike, expected: int) -> npt.NDArray[Any]:
+    """Turn cluster labels into integer codes, checking the length matches."""
+    arr = np.asarray(clusters)
+    if arr.ndim != 1:
+        raise ValueError(f"{name} must be one-dimensional; got shape {arr.shape}")
+    if arr.shape[0] != expected:
+        raise ValueError(
+            f"{name} has {arr.shape[0]} entries but there are {expected} observations; "
+            "every observation needs to say which cluster it belongs to"
+        )
+    _, codes = np.unique(arr, return_inverse=True)
+    return codes
+
+
+def _clustered_mean_variance(values: npt.NDArray[Any], codes: npt.NDArray[Any]) -> float:
+    """Variance of a sample mean when observations arrive in correlated groups.
+
+    Five epochs of the same evaluation sample are five looks at one draw, not five draws.
+    Treating them as independent divides the variance by five times too much, and the
+    interval comes out narrow enough to miss the truth far more often than its nominal
+    rate promises.
+
+    The estimator is the standard cluster-robust one, summing residuals within a cluster
+    before squaring::
+
+        Var(x̄) = G/(G-1) · (1/n²) · Σ_g (Σ_{i∈g} (x_i - x̄))²
+
+    With one observation per cluster this reduces exactly to ``var(x, ddof=1)/n``, which
+    is what makes it safe as a general replacement rather than a special case.
+    """
+    n = values.shape[0]
+    residual = values - values.mean()
+    per_cluster = np.bincount(codes, weights=residual)
+    groups = per_cluster.shape[0]
+    if groups < 2:
+        raise ValueError(
+            f"cluster-robust variance needs at least 2 clusters; got {groups}. "
+            "With a single cluster there is no replication to estimate variance from."
+        )
+    return float(groups / (groups - 1) * np.sum(per_cluster**2) / n**2)
+
+
 def _is_binary(values: npt.NDArray[Any]) -> bool:
     return bool(np.all(np.isin(np.unique(values), (0, 1))))
 
@@ -148,7 +190,13 @@ def judge_only_estimate(judge: npt.ArrayLike, *, alpha: float = 0.05) -> Estimat
     )
 
 
-def gold_only_estimate(gold: npt.ArrayLike, *, alpha: float = 0.05, n_total: int = 0) -> Estimate:
+def gold_only_estimate(
+    gold: npt.ArrayLike,
+    *,
+    alpha: float = 0.05,
+    n_total: int = 0,
+    clusters: npt.ArrayLike | None = None,
+) -> Estimate:
     """Classical estimate from gold labels alone: unbiased, and wider than it needs to be.
 
     Args:
@@ -156,16 +204,46 @@ def gold_only_estimate(gold: npt.ArrayLike, *, alpha: float = 0.05, n_total: int
         alpha: Significance level.
         n_total: Total examples available, recorded for the report; does not affect the
             estimate, since this estimator discards unlabeled examples by construction.
+        clusters: Group label per observation, when observations are not independent.
+            Repeated epochs of one evaluation sample, or several turns of one
+            conversation, are the common cases. Supplying this widens the interval to
+            account for the correlation; omitting it when the data is clustered produces
+            an interval that is too narrow.
 
     Returns:
         The estimate.
 
+    Raises:
+        ValueError: If ``clusters`` has the wrong length or names fewer than 2 groups.
+
     References:
         tests/test_correct.py::test_gold_only_is_unbiased_and_wider_than_ppi
+        tests/test_correct.py::test_clustered_data_undercovers_until_clusters_are_declared
     """
     check_alpha(alpha)
     arr = to_1d_array("gold", np.asarray(gold, dtype=float))
     n = arr.shape[0]
+    if clusters is not None:
+        codes = _cluster_codes("clusters", clusters, n)
+        groups = int(codes.max()) + 1
+        # Wilson assumes independent Bernoulli trials, so it does not apply here however
+        # binary the labels look.
+        se = float(np.sqrt(_clustered_mean_variance(arr, codes)))
+        half = float(stats.t.ppf(1.0 - alpha / 2.0, df=groups - 1)) * se
+        return Estimate(
+            point=float(arr.mean()),
+            low=float(arr.mean() - half),
+            high=float(arr.mean() + half),
+            level=1.0 - alpha,
+            method=f"gold_only (cluster-robust, {groups} clusters)",
+            n_total=max(n_total, n),
+            n_gold=n,
+            assumptions=(
+                "gold labels are a random sample of the evaluation set",
+                "clusters are independent of one another; correlation within a cluster "
+                "is unrestricted",
+            ),
+        )
     if _is_binary(arr):
         interval = wilson_interval(int(arr.sum()), n, alpha=alpha)
         low, high, method = interval.low, interval.high, "gold_only (wilson)"
@@ -217,6 +295,7 @@ def ppi_estimate(
     *,
     alpha: float = 0.05,
     lambda_: float | None = None,
+    clusters: npt.ArrayLike | None = None,
 ) -> Estimate:
     """Prediction-powered estimate of the true mean, using judge labels to tighten gold.
 
@@ -236,6 +315,11 @@ def ppi_estimate(
         gold_index: Positions in ``judge`` that carry a gold label.
         alpha: Significance level.
         lambda_: Fixed tuning parameter. ``None`` selects the variance-minimizing value.
+        clusters: Group label for each of the ``N`` examples, when observations are not
+            independent. A cluster must fall entirely inside the labeled set or entirely
+            outside it, because the estimator's two terms are only independent when the
+            labeled and unlabeled sets share no cluster. Sampling whole clusters for
+            labeling gives that for free, and is the design this argument is for.
 
     Returns:
         The estimate, with the selected ``lambda_`` recorded.
@@ -243,11 +327,13 @@ def ppi_estimate(
     Raises:
         ValueError: If every example is gold-labeled (no unlabeled examples remain, so
             there is nothing to borrow strength from -- use :func:`gold_only_estimate`),
-            or if fewer than two gold labels are supplied.
+            if fewer than two gold labels are supplied, or if a cluster straddles the
+            labeled and unlabeled sets.
 
     References:
         tests/test_correct.py::test_ppi_covers_at_nominal_rate_under_simulation
         tests/test_correct.py::test_ppi_reduces_to_gold_only_at_lambda_zero
+        tests/test_correct.py::test_ppi_covers_clustered_data_when_clusters_are_declared
     """
     check_alpha(alpha)
     judge_arr = to_1d_array("judge", np.asarray(judge, dtype=float))
@@ -285,11 +371,37 @@ def ppi_estimate(
     rectifier = gold_arr - lam * judge_labeled
     point = lam * float(judge_unlabeled.mean()) + float(rectifier.mean())
 
-    variance = float(np.var(rectifier, ddof=1)) / n
-    if lam > 0.0:
-        variance += (lam**2) * float(np.var(judge_unlabeled, ddof=1)) / n_unlabeled
-    half = _z(alpha) * float(np.sqrt(variance))
-    method = "ppi++"
+    cluster_note = ""
+    if clusters is None:
+        variance = float(np.var(rectifier, ddof=1)) / n
+        if lam > 0.0:
+            variance += (lam**2) * float(np.var(judge_unlabeled, ddof=1)) / n_unlabeled
+        half = _z(alpha) * float(np.sqrt(variance))
+    else:
+        codes = _cluster_codes("clusters", clusters, judge_arr.shape[0])
+        labeled_codes, unlabeled_codes = codes[idx], codes[unlabeled_mask]
+        straddling = np.intersect1d(labeled_codes, unlabeled_codes)
+        if straddling.size:
+            raise ValueError(
+                f"{straddling.size} cluster(s) have some examples labeled and some not. "
+                "The two terms of the estimator are only independent when the labeled and "
+                "unlabeled sets share no cluster, so label whole clusters at a time, or "
+                "drop the unlabeled remainder of a partly-labeled cluster."
+            )
+        labeled_groups = np.unique(labeled_codes, return_inverse=True)[1]
+        variance = _clustered_mean_variance(rectifier, labeled_groups)
+        groups_labeled = int(np.unique(labeled_codes).size)
+        groups_unlabeled = int(np.unique(unlabeled_codes).size)
+        if lam > 0.0:
+            variance += (lam**2) * _clustered_mean_variance(
+                judge_unlabeled, np.unique(unlabeled_codes, return_inverse=True)[1]
+            )
+        # Two variance terms with different cluster counts. Taking the smaller count is
+        # conservative and avoids a Satterthwaite approximation nobody would check.
+        df = min(groups_labeled, groups_unlabeled) - 1
+        half = float(stats.t.ppf(1.0 - alpha / 2.0, df=df)) * float(np.sqrt(variance))
+        cluster_note = f" (cluster-robust, {groups_labeled}+{groups_unlabeled} clusters)"
+    method = "ppi++" + cluster_note
 
     # The asymptotic interval is built from the sample variance of the rectifier, and that
     # estimate is worthless when the gold labels carry almost no spread: a stratum where
@@ -302,9 +414,12 @@ def ppi_estimate(
         successes = int(gold_arr.sum())
         if min(successes, n - successes) < 5:
             exact = wilson_interval(successes, n, alpha=alpha)
-            half = max(half, (exact.high - exact.low) / 2.0)
-            method = "ppi++ (widened to the exact interval; too few of one class to trust "
-            method += "the normal approximation)"
+            if (exact.high - exact.low) / 2.0 > half:
+                half = (exact.high - exact.low) / 2.0
+                method += (
+                    " (widened to the exact interval; too few of one class to trust the "
+                    "normal approximation)"
+                )
 
     return Estimate(
         point=point,

@@ -42,6 +42,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 from truescore.io import read_rows
 
 __all__ = ["SUPPORTED_TOOLS", "EvalFormat", "detect_format", "read_eval"]
@@ -295,17 +297,13 @@ def _read_inspect(obj: Mapping[str, Any], source: str) -> EvalFormat:
     rows: list[dict[str, Any]] = []
     scorers = _Accumulator()
     meta = _Accumulator()
-    multi_epoch = any(int(s.get("epoch", 1) or 1) > 1 for s in samples if isinstance(s, Mapping))
 
     for sample in samples:
         if not isinstance(sample, Mapping):
             continue
         identifier = sample.get("id")
-        epoch = sample.get("epoch", 1)
-        row: dict[str, Any] = {
-            "id": f"{identifier}#{epoch}" if multi_epoch else str(identifier),
-        }
-        _put(row, "epoch", epoch)
+        row: dict[str, Any] = {"id": str(identifier)}
+        _put(row, "epoch", sample.get("epoch", 1))
         _put(row, "target", sample.get("target"))
 
         scores = sample.get("scores")
@@ -334,6 +332,18 @@ def _read_inspect(obj: Mapping[str, Any], source: str) -> EvalFormat:
         _carry_extras(row, sample, _INSPECT_KNOWN)
         rows.append(row)
 
+    notes = [
+        'score values "C", "P", "I" and "N" were mapped to 1.0, 0.5, 0.0 and 0.0, '
+        "matching value_to_float in inspect_ai/scorer/_metric.py"
+    ]
+    rows, epochs = _average_epochs(rows, scorers.ordered())
+    if epochs > 1:
+        notes.append(
+            f"{epochs} epochs per sample were averaged to one row each. Epochs of the same "
+            "sample are repeated looks at one draw, and scoring them as independent "
+            "observations would produce intervals narrower than the data supports"
+        )
+
     covariates = ["response_chars"] if any("response_chars" in r for r in rows) else []
     covariates += [c for c in meta.ordered() if _numeric_column(rows, c)]
     return EvalFormat(
@@ -343,12 +353,46 @@ def _read_inspect(obj: Mapping[str, Any], source: str) -> EvalFormat:
         id_column="id" if any(r.get("id") not in (None, "None") for r in rows) else None,
         covariates=tuple(covariates),
         segments=tuple(c for c in meta.ordered() if _categorical_column(rows, c)),
-        notes=(
-            'score values "C", "P", "I" and "N" were mapped to 1.0, 0.5, 0.0 and 0.0, '
-            "matching value_to_float in inspect_ai/scorer/_metric.py",
-        ),
+        notes=tuple(notes),
         source=source,
     )
+
+
+def _average_epochs(
+    rows: list[dict[str, Any]], numeric: Sequence[str]
+) -> tuple[list[dict[str, Any]], int]:
+    """Collapse repeated epochs of one sample into a single row.
+
+    An eval run with ``--epochs 5`` scores every sample five times. Those five outcomes
+    are one draw observed five times, not five draws: they share the sample's difficulty,
+    its prompt and its answer. Passing them downstream as five rows makes every estimator
+    divide the variance by five times more than the data supports, and a nominal 95%
+    interval then covers about 86% of the time
+    (``tests/test_correct.py::test_clustered_data_undercovers_until_clusters_are_declared``).
+
+    The per-sample mean is the unit that carries one independent observation, so scores
+    and response lengths are averaged across epochs and everything else is taken from the
+    first epoch. The count is returned so the caller can say what it did.
+    """
+    by_id: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        by_id.setdefault(str(row.get("id")), []).append(row)
+    most = max((len(group) for group in by_id.values()), default=0)
+    if most <= 1:
+        return rows, 1
+
+    averaged: list[dict[str, Any]] = []
+    fields = [*numeric, "response_chars"]
+    for group in by_id.values():
+        merged = dict(group[0])
+        merged.pop("epoch", None)
+        merged["epochs"] = len(group)
+        for name in fields:
+            values = [r[name] for r in group if isinstance(r.get(name), (int, float))]
+            if values:
+                merged[name] = float(np.mean(values))
+        averaged.append(merged)
+    return averaged, most
 
 
 # --------------------------------------------------------------------------------------

@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.7.1 - 2026-07-27
+
+### Fixed
+
+- **Multi-epoch Inspect logs produced intervals that were too narrow.** 0.7.0 emitted one
+  row per (sample, epoch), so a run with `--epochs 5` handed every estimator five
+  correlated rows per sample. Scored as independent draws they shrink the interval by about
+  sqrt(5) more than the data supports, and a nominal 95% interval covers 86% of the time.
+  Measured, not estimated: `test_clustered_data_undercovers_until_clusters_are_declared`.
+  The adapter now averages epochs to one row per sample, which is the unit carrying one
+  independent observation, and says so in its notes.
+- **A column that never varies is no longer offered as a covariate or a segment.** Inspect
+  logs carry an `epochs` column holding the same integer on every row; suggesting it as a
+  bias covariate sent the reader to a command that raises on a collinear design. A verdict
+  column keeps its reading, since a judge that passed everything still has a pass rate
+  worth monitoring.
+
+### Added
+
+- **`clusters=` on `ppi_estimate` and `gold_only_estimate`, `--cluster-column` on `audit`.**
+  Cluster-robust variance for the general case: several turns of one conversation, several
+  questions from one document, repeated runs. Residuals are summed within a cluster before
+  squaring, so within-cluster correlation is unrestricted. With one observation per cluster
+  it reduces exactly to the independent formula, which is pinned by a test rather than
+  asserted. For PPI a cluster must fall wholly inside or wholly outside the labeled set,
+  because the estimator's two terms are only independent when they share no cluster; a
+  straddling cluster raises with an explanation instead of returning a confident number.
+- **`audit` warns when the identifier column repeats** and no grouping was declared, since
+  the resulting interval looks entirely healthy while being wrong.
+
 ## 0.7.0 - 2026-07-27
 
 ### Added

@@ -154,7 +154,17 @@ def _classify(name: str, raw: list[Any]) -> ColumnProfile:
                 "sparse_verdict",
                 f"pass/fail on {len(present)} of {len(raw)} rows -- looks like human labels",
             )
+        # A judge that passed everything is a degenerate verdict column, not a useless one:
+        # its pass rate is 1.0, it can be monitored, and it can be corrected against gold.
+        # So invariance is checked after this branch rather than before it.
         return profile("verdict", "pass/fail on every row -- looks like a judge column")
+
+    if len(distinct) < 2 and n_missing == 0:
+        # Every remaining reading needs the column to vary. A covariate that never moves
+        # has no identifiable coefficient and makes the bias regression raise; a segment
+        # with one level cannot separate anything. Inspect logs supply both cases at once,
+        # an `epochs` column that is the same integer on every row being the usual one.
+        return profile("constant", f"one value ({distinct[0]}) on every row")
 
     numeric: list[float] = []
     for token in tokens:
@@ -183,10 +193,6 @@ def _classify(name: str, raw: list[Any]) -> ColumnProfile:
     # classified the same way a six-thousand-row one would be.
     if len(present) >= 4 and len(distinct) / len(present) > 0.9:
         return profile("identifier", "nearly unique per row -- looks like an id")
-    if len(distinct) < 2:
-        # One level cannot separate anything, so offering it as a segment wastes the
-        # reader's next command.
-        return profile("constant", f"one value ({distinct[0]}) on every row")
     return profile(
         "categorical", f"{len(distinct)} values ({', '.join(distinct[:4])}...) -- sliceable"
     )

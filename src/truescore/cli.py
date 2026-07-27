@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -43,7 +43,7 @@ from truescore.compare import mcnemar, ppi_compare
 from truescore.contamination import combine_shards, exchangeability_test
 from truescore.doctor import diagnose
 from truescore.drift import judge_drift
-from truescore.io import LabelSet, join_gold, load_labels, read_rows
+from truescore.io import LabelSet, get_field, join_gold, load_labels, read_rows
 from truescore.power import required_gold_labels
 from truescore.report import build_report
 from truescore.sequential import confidence_sequence, first_exclusion, windowed_exclusion
@@ -105,19 +105,56 @@ def _load(args: argparse.Namespace) -> LabelSet:
         rows = joined.rows
         gold = joined.gold_column
 
-    return load_labels(
+    labels = load_labels(
         rows,
         judge=judge,
         gold=gold,
         id_column=id_column,
         covariates=getattr(args, "covariate", None) or (),
     )
+    _warn_if_clustered(rows, id_column, getattr(args, "cluster_column", None))
+    return labels
+
+
+def _warn_if_clustered(
+    rows: Sequence[Mapping[str, Any]], id_column: str | None, cluster_column: str | None
+) -> None:
+    """Say so when a file has several rows per example and nobody declared it.
+
+    Repeated rows for one example are correlated: several epochs of a run, several turns of
+    a conversation, the same question asked twice. Every estimator here assumes one
+    independent observation per row, so undeclared repetition produces intervals narrower
+    than the data supports. Silence would be the wrong default, since the resulting number
+    looks entirely healthy.
+    """
+    if cluster_column is not None or id_column is None:
+        return
+    seen: set[str] = set()
+    repeated = 0
+    for row in rows:
+        key = str(get_field(row, id_column))
+        if key in seen:
+            repeated += 1
+        seen.add(key)
+    if repeated:
+        print(
+            f"warning: {id_column!r} repeats on {repeated} of {len(rows)} rows, so this "
+            "file holds several observations per example. Those are correlated, and "
+            "intervals computed as though they were independent come out too narrow. "
+            f"Pass --cluster-column {id_column} to account for it.\n",
+            file=sys.stderr,
+        )
 
 
 def _cmd_audit(args: argparse.Namespace) -> int:
     labels = _load(args)
     print(labels.summary())
     print()
+
+    clusters = None
+    if getattr(args, "cluster_column", None):
+        rows = read_eval(args.file).rows
+        clusters = np.asarray([str(get_field(row, args.cluster_column)) for row in rows])
 
     report = build_report(
         labels.judge,
@@ -127,6 +164,7 @@ def _cmd_audit(args: argparse.Namespace) -> int:
         system_name=args.system_name,
         alpha=args.alpha,
         covariates=labels.covariates_on_gold() or None,
+        clusters=clusters,
     )
     print(report.summary())
 
@@ -396,6 +434,11 @@ def _build_parser() -> argparse.ArgumentParser:
     audit.add_argument("--gold-id", help="identifier column inside --gold-file, if it differs")
     audit.add_argument("--covariate", action="append", help="numeric column for bias analysis")
     audit.add_argument("--id-column", help="column of example identifiers")
+    audit.add_argument(
+        "--cluster-column",
+        help="column grouping correlated rows, such as several epochs of one example; "
+        "widens the intervals to account for the correlation",
+    )
     audit.add_argument("--metric-name", default="pass rate")
     audit.add_argument("--system-name", default="system")
     audit.add_argument("--json", help="write the JSON report here")

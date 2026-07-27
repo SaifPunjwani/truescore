@@ -269,3 +269,88 @@ def test_ppi_keeps_its_advantage_when_the_approximation_is_sound() -> None:
         ppi_widths.append(ppi_estimate(judge, truth[index], index).half_width)
         gold_widths.append(gold_only_estimate(truth[index]).half_width)
     assert float(np.mean(ppi_widths)) < 0.75 * float(np.mean(gold_widths))
+
+
+def test_clustered_variance_reduces_to_the_iid_formula_with_singleton_clusters() -> None:
+    """One observation per cluster is the independent case, and must give the same answer.
+
+    This is what makes the cluster-robust path safe as a general replacement rather than a
+    separate branch that could drift away from the estimator it is meant to generalize.
+    """
+    rng = np.random.default_rng(3)
+    values = rng.random(80)
+
+    plain = gold_only_estimate(values)
+    singletons = gold_only_estimate(values, clusters=np.arange(80))
+
+    assert plain.point == pytest.approx(singletons.point)
+    assert plain.low == pytest.approx(singletons.low, abs=1e-12)
+    assert plain.high == pytest.approx(singletons.high, abs=1e-12)
+
+
+def test_clustered_data_undercovers_until_clusters_are_declared() -> None:
+    """Repeated epochs of one sample are one draw looked at five times, not five draws.
+
+    An eval run with --epochs 5 produces five correlated rows per sample. Treating them as
+    independent shrinks the interval by roughly sqrt(5) more than the data supports, and a
+    nominal 95% interval then covers about 86% of the time. Measured, because a coverage
+    claim that is asserted rather than simulated is the claim most likely to be wrong.
+    """
+    rng = np.random.default_rng(0)
+    samples, epochs, reps = 200, 5, 600
+    naive = clustered = 0
+    for _ in range(reps):
+        difficulty = rng.beta(2, 2, size=samples)
+        outcomes = (rng.random((samples, epochs)) < difficulty[:, None]).astype(float)
+        flat = outcomes.ravel()
+        groups = np.repeat(np.arange(samples), epochs)
+        truth = 0.5  # the mean of Beta(2, 2)
+
+        without = gold_only_estimate(flat)
+        with_clusters = gold_only_estimate(flat, clusters=groups)
+        naive += without.low <= truth <= without.high
+        clustered += with_clusters.low <= truth <= with_clusters.high
+
+    assert naive / reps < 0.90, "the bug this guards against did not reproduce"
+    assert 0.93 <= clustered / reps <= 0.97
+
+
+def test_ppi_covers_clustered_data_when_clusters_are_declared() -> None:
+    """The same guarantee for the corrected estimate, with whole clusters labeled."""
+    rng = np.random.default_rng(1)
+    samples, epochs, labeled_samples, reps = 300, 4, 90, 500
+    covered = 0
+    for _ in range(reps):
+        difficulty = rng.beta(2, 2, size=samples)
+        gold = (rng.random((samples, epochs)) < difficulty[:, None]).astype(float)
+        # A judge that is right most of the time, wrong in a correlated way per sample.
+        flips = rng.random((samples, epochs)) < (0.12 + 0.1 * difficulty[:, None])
+        judge = np.where(flips, 1.0 - gold, gold)
+        groups = np.repeat(np.arange(samples), epochs)
+
+        chosen = rng.choice(samples, size=labeled_samples, replace=False)
+        index = np.flatnonzero(np.isin(groups, chosen))
+        estimate = ppi_estimate(judge.ravel(), gold.ravel()[index], index, clusters=groups)
+        covered += estimate.low <= 0.5 <= estimate.high
+
+    assert 0.92 <= covered / reps <= 0.98
+
+
+def test_ppi_refuses_a_cluster_split_across_the_labeled_boundary() -> None:
+    """Half-labeled clusters break the independence the two terms rely on."""
+    judge = np.array([1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 1.0])
+    groups = np.array([0, 0, 1, 1, 2, 2, 3, 3])
+    index = np.array([0, 2, 4])  # takes one member of cluster 0, 1 and 2 each
+
+    with pytest.raises(ValueError, match="some examples labeled and some not"):
+        ppi_estimate(judge, np.array([1.0, 1.0, 0.0]), index, clusters=groups)
+
+
+def test_a_single_cluster_cannot_support_an_interval() -> None:
+    with pytest.raises(ValueError, match="at least 2 clusters"):
+        gold_only_estimate(np.array([1.0, 0.0, 1.0, 0.0]), clusters=np.zeros(4))
+
+
+def test_clusters_must_cover_every_observation() -> None:
+    with pytest.raises(ValueError, match="every observation needs to say"):
+        gold_only_estimate(np.array([1.0, 0.0, 1.0]), clusters=np.array([0, 1]))

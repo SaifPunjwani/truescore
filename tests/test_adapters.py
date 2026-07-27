@@ -504,3 +504,45 @@ def test_a_single_provider_run_offers_no_provider_segment(tmp_path: Path) -> Non
 
     assert "provider" not in found.segments
     assert "var.topic" in found.segments
+
+
+def test_multi_epoch_inspect_logs_collapse_to_one_row_per_sample(tmp_path: Path) -> None:
+    """Five epochs of a sample are one draw seen five times, not five draws.
+
+    Emitting a row per (sample, epoch) makes every downstream estimator divide the variance
+    by five times more than the data supports. Measured at 86% coverage on a nominal 95%
+    interval in tests/test_correct.py::test_clustered_data_undercovers_until_clusters_are_declared,
+    which is why the adapter averages them here rather than leaving it to the caller.
+    """
+    samples = []
+    for sample_id in range(20):
+        for epoch in range(1, 6):
+            samples.append(
+                {
+                    "id": f"q{sample_id}",
+                    "epoch": epoch,
+                    "target": "yes",
+                    "output": {"completion": "x" * (10 + epoch)},
+                    # 3 of 5 epochs correct, so the sample's mean score is 0.6
+                    "scores": {"grader": {"value": "C" if epoch <= 3 else "I"}},
+                    "metadata": {"segment": "billing"},
+                }
+            )
+    log = {"eval": {"task": "t"}, "samples": samples}
+
+    found = read_eval(_write(tmp_path / "log.json", log))
+
+    assert len(found.rows) == 20, "one row per sample, not per sample-epoch"
+    assert {row["id"] for row in found.rows} == {f"q{i}" for i in range(20)}
+    assert all(row["epochs"] == 5 for row in found.rows)
+    assert all(row["score.grader"] == pytest.approx(0.6) for row in found.rows)
+    assert any("epochs per sample were averaged" in note for note in found.notes)
+
+
+def test_single_epoch_logs_are_left_alone(tmp_path: Path) -> None:
+    """The averaging must not fire on the ordinary case, or ids would gain a stray column."""
+    found = read_eval(_write(tmp_path / "log.json", INSPECT_LOG))
+
+    assert len(found.rows) == 4
+    assert all("epochs" not in row for row in found.rows)
+    assert not any("averaged" in note for note in found.notes)

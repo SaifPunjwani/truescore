@@ -136,6 +136,19 @@ accuracy Inspect itself reported. Columns you added by hand are carried through 
 their own names. Anything unrecognized is read as plain rows, and column names accept
 dotted paths (`gradingResult.pass`, `scores.0.value`) for in-house formats.
 
+### Correlated rows
+
+An eval run with `--epochs 5` scores every sample five times, and those outcomes are
+correlated. Scored as independent they produce a 95% interval that covers 86% of the time.
+Inspect logs are averaged to one row per sample automatically; for anything else, name the
+grouping column:
+
+```sh
+truescore audit results.csv --judge passed --gold human --cluster-column conversation_id
+```
+
+`audit` warns when the identifier column repeats and no grouping was declared.
+
 ### Human labels in a separate file
 
 Human labels rarely live in the file the eval tool wrote: the tool writes verdicts, and
@@ -169,7 +182,7 @@ print(report.summary())
 ### GitHub Actions
 
 ```yaml
-- uses: SaifPunjwani/truescore@v0.7.0
+- uses: SaifPunjwani/truescore@v0.7.1
   with:
     command: drift
     args: anchor.csv --baseline judge_pinned --current judge_today --gold human_passed
@@ -237,7 +250,7 @@ input produces a finite result or raises `ValueError`, never a silent NaN. That 
 three defects before the first release, including a near-deterministic slice whose interval
 covered 7.7% of the time.
 
-650 tests, `mypy --strict`, CI on Linux and macOS across Python 3.10 and 3.13.
+659 tests, `mypy --strict`, CI on Linux and macOS across Python 3.10 and 3.13.
 
 ## Findings
 

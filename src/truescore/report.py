@@ -267,6 +267,7 @@ def build_report(
     covariates: Mapping[str, npt.ArrayLike] | None = None,
     comparison: ComparisonResult | None = None,
     timestamp: str | None = None,
+    clusters: npt.ArrayLike | None = None,
 ) -> EvalReport:
     """Assemble a full evaluation report from judge labels and a gold-labeled subset.
 
@@ -283,6 +284,8 @@ def build_report(
             :mod:`truescore.compare`.
         timestamp: ISO-8601 timestamp; defaults to now (UTC). Supply a fixed value for
             reproducible artifacts.
+        clusters: Group label per example, when observations are not independent. Passed
+            through to the estimators, which widen their intervals accordingly.
 
     Returns:
         The :class:`EvalReport`.
@@ -296,9 +299,15 @@ def build_report(
     gold_arr = np.asarray(gold)
     index = np.asarray(gold_index)
 
+    cluster_arr = None if clusters is None else np.asarray(clusters)
     naive = judge_only_estimate(judge_arr, alpha=alpha)
-    corrected = ppi_estimate(judge_arr, gold_arr, index, alpha=alpha)
-    gold_view = gold_only_estimate(gold_arr, alpha=alpha, n_total=int(judge_arr.shape[0]))
+    corrected = ppi_estimate(judge_arr, gold_arr, index, alpha=alpha, clusters=cluster_arr)
+    gold_view = gold_only_estimate(
+        gold_arr,
+        alpha=alpha,
+        n_total=int(judge_arr.shape[0]),
+        clusters=None if cluster_arr is None else cluster_arr[index],
+    )
 
     judge_on_gold = judge_arr[index]
     agreement: AgreementReport | None

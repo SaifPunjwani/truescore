@@ -80,7 +80,29 @@ use the estimated $\lambda$, so they test the estimator as it ships.
 2. **Judge labels were produced the same way for labeled and unlabeled examples.** Scoring
    the labeled subset with a more careful prompt breaks the comparison.
 3. **The interval is asymptotic.** With fewer than roughly 30 gold labels, prefer
-   `gold_only_estimate`, whose Wilson interval is exact. The docstring says so.
+   `gold_only_estimate`, whose Wilson interval is exact.
+4. **One row is one independent observation.** Evaluations violate this routinely. A run
+   with `--epochs 5` scores every sample five times, and those five outcomes share the
+   sample's difficulty, prompt and answer. Treated as five draws they shrink the interval
+   by about $\sqrt{5}$ more than the data supports: a nominal 95% interval covers 86% of
+   the time, measured in
+   `tests/test_correct.py::test_clustered_data_undercovers_until_clusters_are_declared`.
+   Pass `clusters=` to `ppi_estimate` and `gold_only_estimate`, or `--cluster-column` on
+   the command line, and the variance becomes cluster-robust:
+
+   $$\operatorname{Var}(\bar{x}) = \frac{G}{G-1}\cdot\frac{1}{n^{2}}\sum_{g}\Bigl(\sum_{i \in g}(x_i - \bar{x})\Bigr)^{2}$$
+
+   Residuals are summed within a cluster before squaring, so within-cluster correlation is
+   unrestricted. With one observation per cluster this reduces exactly to
+   $\operatorname{var}(x)/n$, pinned by
+   `test_clustered_variance_reduces_to_the_iid_formula_with_singleton_clusters`, which is
+   what makes it safe as a general replacement rather than a separate code path.
+
+   For PPI a cluster must lie wholly inside the labeled set or wholly outside it, since
+   the estimator's two terms are only independent when they share no cluster. Sampling
+   whole clusters for labeling gives that for free; a straddling cluster raises. The
+   Inspect adapter averages epochs to one row per sample before any of this, so the common
+   case needs nothing from the caller. The docstring says so.
 
 ## Rogan–Gladen, and when to prefer it
 

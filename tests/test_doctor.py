@@ -256,3 +256,28 @@ def test_diagnose_recognizes_eval_tool_output(tmp_path: Path) -> None:
     assert result.tool == "inspect"
     assert "recognized as inspect output" in result.summary()
     assert "score.grader" in result.judge_candidates
+
+
+def test_a_column_that_never_varies_is_constant_whatever_it_looks_like(tmp_path: Path) -> None:
+    """A covariate or segment that never moves is not one, whatever its shape.
+
+    Inspect logs carry an `epochs` column holding the same integer on every row. Read as a
+    covariate it makes the bias regression raise on a collinear design; read as a segment
+    it cannot separate anything. A verdict column is the exception and keeps its reading,
+    since a judge that passed everything still has a pass rate worth monitoring.
+    """
+    path = tmp_path / "constant.csv"
+    rows = ["judge,epochs,scorer,segment"] + [
+        f"{i % 2},5,grader,{'a' if i % 2 else 'b'}" for i in range(40)
+    ]
+    path.write_text("\n".join(rows), encoding="utf-8")
+
+    result = diagnose(path)
+    by_name = {c.name: c.kind for c in result.columns}
+
+    assert by_name["epochs"] == "constant", "a numeric column that never moves"
+    assert by_name["scorer"] == "constant", "a categorical column with one level"
+    assert by_name["judge"] == "verdict", "a real verdict column still reads as one"
+    assert by_name["segment"] == "categorical"
+    assert "epochs" not in result.covariate_candidates
+    assert "scorer" not in result.slice_candidates
