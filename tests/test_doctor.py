@@ -226,3 +226,33 @@ def test_a_wide_numeric_column_is_a_covariate_not_a_rubric(tmp_path: Path) -> No
     rows = ["judge,tokens"] + [f"1,{100 + i}" for i in range(60)]
     path.write_text("\n".join(rows), encoding="utf-8")
     assert {c.name: c.kind for c in diagnose(path).columns}["tokens"] == "numeric"
+
+
+def test_diagnose_recognizes_eval_tool_output(tmp_path: Path) -> None:
+    """doctor is the first command anyone runs, so it must open the file they have.
+
+    An inspect log is a single JSON object with the samples nested inside it, which the
+    plain row reader cannot open at all.
+    """
+    log = {
+        "eval": {"task": "t", "model": "m"},
+        "samples": [
+            {
+                "id": f"q{i}",
+                "epoch": 1,
+                "target": "yes",
+                "output": {"completion": "x" * (10 + i)},
+                "scores": {"grader": {"value": "C" if i % 3 else "I"}},
+                "metadata": {"segment": "billing" if i % 2 else "account"},
+            }
+            for i in range(60)
+        ],
+    }
+    path = tmp_path / "log.json"
+    path.write_text(json.dumps(log), encoding="utf-8")
+
+    result = diagnose(path)
+
+    assert result.tool == "inspect"
+    assert "recognized as inspect output" in result.summary()
+    assert "score.grader" in result.judge_candidates

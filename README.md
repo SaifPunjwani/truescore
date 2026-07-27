@@ -112,19 +112,48 @@ truescore plan    --n-total 4000 --target 0.03 --sensitivity 0.97 --specificity 
 Exit codes are 0 for no finding, 2 for a finding, and 1 for a failure to run. A CI job can
 therefore fail on judge drift without also failing on a malformed file.
 
-### Nested output
+### Eval tool output
 
-Column names accept dotted paths, so output from promptfoo, lm-eval-harness or an in-house
-harness can be read without reshaping:
+Point any command at the file your eval tool already wrote. These formats are recognized
+and flattened, and the judge column is identified for you:
+
+| tool | file |
+| --- | --- |
+| [Inspect AI](https://inspect.aisi.org.uk/) | `logs/*.json` written with `--log-format=json` |
+| [promptfoo](https://promptfoo.dev/) | `promptfoo eval -o results.json` (also `.jsonl`, `.csv`) |
+| [DeepEval](https://deepeval.com/) | `.deepeval/.latest_test_run.json` |
+| [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness) | `samples_<task>_<timestamp>.jsonl` |
 
 ```sh
-truescore audit run.jsonl \
-    --judge gradingResult.pass \
-    --gold human \
-    --covariate response.tokenUsage.completion
+truescore doctor logs/2026-07-27_support-qa.json
 ```
 
-`doctor` flattens nested JSON when profiling and reports the available paths.
+Each shape is taken from that tool's own serialization code rather than from a sample
+file, and each is pinned by a fixture test in `tests/test_adapters.py`. Score values are
+mapped the way the tool maps them: Inspect's `C`, `P`, `I` and `N` become 1.0, 0.5, 0.0
+and 0.0, matching its `value_to_float`, so a corrected number stays comparable to the
+accuracy Inspect itself reported. Columns you added by hand are carried through under
+their own names. Anything unrecognized is read as plain rows, and column names accept
+dotted paths (`gradingResult.pass`, `scores.0.value`) for in-house formats.
+
+### Human labels in a separate file
+
+Human labels rarely live in the file the eval tool wrote: the tool writes verdicts, and
+somebody labels a subset in a spreadsheet afterwards. `--gold-file` joins the two by
+identifier, so neither file needs editing:
+
+```sh
+truescore audit results.json \
+    --gold-file labels.csv --gold human --gold-id example_id \
+    --covariate response_chars
+```
+
+`--judge` is optional here because the format was recognized. The join reports how many
+labels landed, and refuses rather than guessing when the key matches nothing, when an
+identifier repeats, or when one example carries two human verdicts.
+
+`response_chars` is derived from the response text for every supported format, which makes
+the standard verbosity-bias check available on any eval output without adding a column.
 
 ### Python
 
@@ -140,7 +169,7 @@ print(report.summary())
 ### GitHub Actions
 
 ```yaml
-- uses: SaifPunjwani/truescore@v0.6.0
+- uses: SaifPunjwani/truescore@v0.7.0
   with:
     command: drift
     args: anchor.csv --baseline judge_pinned --current judge_today --gold human_passed
@@ -164,7 +193,8 @@ Set `fail-on-finding: false` to report without blocking the build.
 | `contamination` | Exact permutation test for a memorised evaluation set. |
 | `power` | Labeling budgets, minimum detectable effect, required sample size. |
 | `report` | JSON, markdown and self-contained HTML artifacts recording estimator, assumptions and the uncorrected number. |
-| `io` / `cli` | CSV and JSON Lines loading with sparse gold columns; the command line. |
+| `adapters` | Reads Inspect AI, promptfoo, DeepEval and lm-evaluation-harness output directly, and identifies the judge column. |
+| `io` / `cli` | CSV and JSON Lines loading with sparse gold columns, joining human labels from a separate file; the command line. |
 
 ## Human labels
 
@@ -207,7 +237,7 @@ input produces a finite result or raises `ValueError`, never a silent NaN. That 
 three defects before the first release, including a near-deterministic slice whose interval
 covered 7.7% of the time.
 
-622 tests, `mypy --strict`, CI on Linux and macOS across Python 3.10 and 3.13.
+650 tests, `mypy --strict`, CI on Linux and macOS across Python 3.10 and 3.13.
 
 ## Documentation
 

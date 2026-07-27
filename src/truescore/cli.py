@@ -32,16 +32,18 @@ import argparse
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
 from truescore import __version__
+from truescore.adapters import read_eval
 from truescore.agreement import judge_agreement
 from truescore.compare import mcnemar, ppi_compare
 from truescore.contamination import combine_shards, exchangeability_test
 from truescore.doctor import diagnose
 from truescore.drift import judge_drift
-from truescore.io import LabelSet, load_labels, read_rows
+from truescore.io import LabelSet, join_gold, load_labels, read_rows
 from truescore.power import required_gold_labels
 from truescore.report import build_report
 from truescore.sequential import confidence_sequence, first_exclusion, windowed_exclusion
@@ -61,14 +63,53 @@ def _write(path: str | None, text: str, label: str) -> None:
 
 
 def _load(args: argparse.Namespace) -> LabelSet:
-    """Load the label set an argparse namespace describes."""
-    judge: str = args.judge
+    """Load the label set an argparse namespace describes.
+
+    Two conveniences live here rather than in the library, because they are about how
+    files arrive rather than about statistics. The file is recognized first, so output
+    from a supported eval tool needs no reshaping and ``--judge`` can be inferred. And
+    human labels may live in a second file, which is where they actually live: the eval
+    tool writes verdicts, and somebody labels a subset in a spreadsheet afterwards.
+    """
+    found = read_eval(args.file)
+    if found.tool != "generic":
+        print(found.summary())
+        print()
+
+    judge: str | None = getattr(args, "judge", None) or found.judge_column
+    if judge is None:
+        raise ValueError(
+            f"no judge column given and none could be identified in {args.file}. "
+            "Pass --judge, or run `truescore doctor` on the file to see the columns."
+        )
+
+    rows: list[dict[str, Any]] = found.rows
     gold: str | None = getattr(args, "gold", None)
+    gold_file = getattr(args, "gold_file", None)
+    id_column: str | None = getattr(args, "id_column", None) or found.id_column
+
+    if gold_file:
+        if gold is None:
+            raise ValueError("--gold names the human verdict column inside --gold-file")
+        if id_column is None:
+            raise ValueError("--gold-file needs --id-column so labels can be matched to examples")
+        joined = join_gold(
+            rows,
+            gold_file,
+            on=id_column,
+            gold=gold,
+            gold_on=getattr(args, "gold_id", None),
+        )
+        print(joined.summary())
+        print()
+        rows = joined.rows
+        gold = joined.gold_column
+
     return load_labels(
-        args.file,
+        rows,
         judge=judge,
         gold=gold,
-        id_column=getattr(args, "id_column", None),
+        id_column=id_column,
         covariates=getattr(args, "covariate", None) or (),
     )
 
@@ -334,9 +375,25 @@ def _build_parser() -> argparse.ArgumentParser:
         target.add_argument("--alpha", type=float, default=0.05, help="significance level")
 
     audit = sub.add_parser("audit", help="correct a judge-scored evaluation and report it")
-    audit.add_argument("file", help="CSV or JSONL of evaluation results")
-    audit.add_argument("--judge", required=True, help="column holding the judge verdict")
-    audit.add_argument("--gold", required=True, help="column holding the human verdict")
+    audit.add_argument(
+        "file",
+        help="evaluation results: CSV, JSONL, or output from promptfoo, inspect, "
+        "deepeval or lm-evaluation-harness",
+    )
+    audit.add_argument(
+        "--judge",
+        help="column holding the judge verdict; inferred when the file is recognized",
+    )
+    audit.add_argument(
+        "--gold",
+        required=True,
+        help="column holding the human verdict, in --gold-file if one is given",
+    )
+    audit.add_argument(
+        "--gold-file",
+        help="separate file of human labels, matched to examples by --id-column",
+    )
+    audit.add_argument("--gold-id", help="identifier column inside --gold-file, if it differs")
     audit.add_argument("--covariate", action="append", help="numeric column for bias analysis")
     audit.add_argument("--id-column", help="column of example identifiers")
     audit.add_argument("--metric-name", default="pass rate")

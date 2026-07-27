@@ -30,9 +30,10 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
+from truescore.adapters import read_eval
 from truescore.bias import judge_error_regression
 from truescore.compare import holm
-from truescore.io import get_field, read_rows
+from truescore.io import get_field
 from truescore.power import required_gold_labels
 
 __all__ = ["ColumnProfile", "Diagnosis", "diagnose"]
@@ -85,13 +86,17 @@ class Diagnosis:
     blocked: tuple[tuple[str, str], ...]
     bias_findings: tuple[str, ...]
     recommendations: tuple[str, ...]
+    tool: str = "generic"
 
     def summary(self) -> str:
         """Human-readable multi-line report."""
         # Dotted paths from nested JSON can be long, so size the column to the data.
         width = max([len(c.name) for c in self.columns] + [len("column")]) + 2
+        header = f"{self.path}: {self.n_rows} rows, {len(self.columns)} columns"
+        if self.tool != "generic":
+            header += f", recognized as {self.tool} output"
         lines = [
-            f"{self.path}: {self.n_rows} rows, {len(self.columns)} columns",
+            header,
             "",
             f"  {'column':<{width}}{'kind':<18}{'coverage':>10}  detail",
         ]
@@ -178,8 +183,37 @@ def _classify(name: str, raw: list[Any]) -> ColumnProfile:
     # classified the same way a six-thousand-row one would be.
     if len(present) >= 4 and len(distinct) / len(present) > 0.9:
         return profile("identifier", "nearly unique per row -- looks like an id")
+    if len(distinct) < 2:
+        # One level cannot separate anything, so offering it as a segment wastes the
+        # reader's next command.
+        return profile("constant", f"one value ({distinct[0]}) on every row")
     return profile(
         "categorical", f"{len(distinct)} values ({', '.join(distinct[:4])}...) -- sliceable"
+    )
+
+
+def _label_budget_advice(n_rows: int) -> str:
+    """Say what a label budget buys, at a precision this evaluation can actually reach.
+
+    Asking for a fixed +/-0.03 gives an absurd answer on a small evaluation: the number of
+    labels needed approaches the number of rows, so the advice becomes "label everything",
+    which is both useless and the opposite of the point. Precision is bounded by how many
+    examples exist, so the honest move is to report the tightest target this file supports
+    rather than to restate a target it cannot reach.
+    """
+    for target in (0.03, 0.05, 0.08, 0.10):
+        plan = required_gold_labels(
+            n_rows, target_half_width=target, sensitivity=0.9, specificity=0.8
+        )
+        # Labelling most of the file is not a correction, it is just an evaluation.
+        if plan.feasible and plan.required_gold <= n_rows // 2:
+            return (
+                f"about {plan.required_gold} of these {n_rows} rows labelled by a person "
+                f"would unblock all three, at +/-{target:g} on the corrected score"
+            )
+    return (
+        f"this evaluation has only {n_rows} rows, too few for a corrected interval much "
+        "tighter than the judge-only one. More examples help here as much as more labels"
     )
 
 
@@ -239,11 +273,13 @@ def diagnose(path: str | Path, *, alpha: float = 0.05) -> Diagnosis:
     """Profile an evaluation file and report what it supports.
 
     Args:
-        path: CSV or JSON Lines file of evaluation results.
+        path: An evaluation file. CSV and JSON Lines are read directly; output written by
+            a supported eval tool is recognized and flattened first, so this works on a
+            promptfoo ``--output`` file or an inspect log without any preparation.
         alpha: Significance level used by the bias scan.
 
     Returns:
-        A :class:`Diagnosis`.
+        A :class:`Diagnosis`. Its ``tool`` field names the format that was recognized.
 
     Raises:
         ValueError: If the file cannot be read or has no rows.
@@ -251,8 +287,10 @@ def diagnose(path: str | Path, *, alpha: float = 0.05) -> Diagnosis:
     References:
         tests/test_doctor.py::test_diagnose_finds_judge_and_gold_columns
         tests/test_doctor.py::test_diagnose_says_what_is_blocked_without_human_labels
+        tests/test_doctor.py::test_diagnose_recognizes_eval_tool_output
     """
-    rows = read_rows(path)
+    found = read_eval(path)
+    rows = found.rows
     names = _flat_paths(rows[0])
     columns = tuple(_classify(name, [get_field(row, name) for row in rows]) for name in names)
 
@@ -321,14 +359,10 @@ def diagnose(path: str | Path, *, alpha: float = 0.05) -> Diagnosis:
                 "a +/-0.03 interval at a typical judge quality"
             )
     elif judges:
-        plan = required_gold_labels(
-            len(rows), target_half_width=0.03, sensitivity=0.9, specificity=0.8
-        )
         blocked.append(
             (
                 "correcting the score, measuring judge quality, per-segment analysis",
-                f"no human labels. About {plan.required_gold} of these {len(rows)} rows "
-                "labelled by a person would unblock all three",
+                f"no human labels. {_label_budget_advice(len(rows))}",
             )
         )
         recommendations.append(
@@ -385,4 +419,5 @@ def diagnose(path: str | Path, *, alpha: float = 0.05) -> Diagnosis:
         blocked=tuple(blocked),
         bias_findings=bias_findings,
         recommendations=tuple(recommendations),
+        tool=found.tool,
     )

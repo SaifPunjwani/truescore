@@ -284,3 +284,101 @@ def test_audit_writes_an_html_report(tmp_path: Path) -> None:
     html = html_path.read_text(encoding="utf-8")
     assert html.startswith("<!DOCTYPE html>")
     assert "Corrected (use this)" in html
+
+
+def test_audit_reads_promptfoo_output_and_a_separate_label_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The flow this tool has to support: the eval file the tool wrote, plus a spreadsheet.
+
+    Human labels never arrive in the same file as judge verdicts. The eval tool writes one
+    and a person fills in the other, so requiring a hand merge first is the step that stops
+    people trying anything at all.
+    """
+    import json
+
+    rng = np.random.default_rng(11)
+    records = []
+    for i in range(400):
+        passed = bool(rng.random() < 0.8)
+        records.append(
+            {
+                "id": f"case-{i}",
+                "promptIdx": 0,
+                "testIdx": i,
+                "success": passed,
+                "score": float(passed),
+                "gradingResult": {"pass": passed, "score": float(passed)},
+                "provider": {"id": "openai:gpt-4o", "label": "gpt-4o"},
+                "response": {"output": "x" * int(rng.integers(20, 400))},
+                "testCase": {"vars": {"topic": "billing" if i % 2 else "account"}},
+            }
+        )
+    eval_path = tmp_path / "promptfoo-output.json"
+    eval_path.write_text(
+        json.dumps({"evalId": "e", "results": {"version": 3, "results": records}}),
+        encoding="utf-8",
+    )
+
+    # A hundred of them get a human verdict; the judge is lenient, passing some the human
+    # fails, which is the whole reason to correct the score.
+    label_lines = ["example_id,human"]
+    for i in range(100):
+        judged = records[i]["success"]
+        human = judged and not (rng.random() < 0.25)
+        label_lines.append(f"case-{i},{int(human)}")
+    label_path = tmp_path / "labels.csv"
+    label_path.write_text("\n".join(label_lines) + "\n", encoding="utf-8")
+
+    code = main(
+        [
+            "audit",
+            str(eval_path),
+            "--gold-file",
+            str(label_path),
+            "--gold",
+            "human",
+            "--gold-id",
+            "example_id",
+            "--covariate",
+            "response_chars",
+        ]
+    )
+    out = capsys.readouterr().out
+
+    assert code in (EXIT_OK, EXIT_FINDING)
+    assert "promptfoo: 400 examples" in out
+    assert "joined 100 human labels onto 400 examples" in out
+    # --judge was never passed: the column came from recognizing the format.
+    assert "judge verdict: success" in out
+    assert "loaded 400 examples" in out
+    assert "human-labeled: 100" in out
+
+
+def test_audit_without_a_judge_column_on_an_unrecognized_file_says_what_to_do(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Inference is a convenience, so its failure has to point somewhere useful."""
+    path = tmp_path / "plain.csv"
+    path.write_text("a,b\n1,2\n", encoding="utf-8")
+
+    code = main(["audit", str(path), "--gold", "b"])
+
+    assert code == EXIT_ERROR
+    assert "truescore doctor" in capsys.readouterr().err
+
+
+def test_gold_file_without_an_id_column_says_so(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "plain.csv"
+    path.write_text("judge,x\n1,2\n", encoding="utf-8")
+    labels = tmp_path / "l.csv"
+    labels.write_text("id,human\n1,1\n", encoding="utf-8")
+
+    code = main(
+        ["audit", str(path), "--judge", "judge", "--gold", "human", "--gold-file", str(labels)]
+    )
+
+    assert code == EXIT_ERROR
+    assert "needs --id-column" in capsys.readouterr().err

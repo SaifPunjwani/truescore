@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.7.0 - 2026-07-27
+
+### Added
+
+- **Native eval-tool formats.** `truescore.adapters` reads the output of Inspect AI,
+  promptfoo, DeepEval and lm-evaluation-harness directly, identifies the judge column, and
+  flattens the records. Two of these formats a plain row reader cannot open at all: an
+  Inspect log and a promptfoo `--output` file are single JSON objects with the records
+  nested inside. Every shape was taken from the tool's own serialization code, so the
+  fixtures in `tests/test_adapters.py` describe what the tools write rather than what
+  seemed likely. Inspect's `C`, `P`, `I` and `N` map to 1.0, 0.5, 0.0 and 0.0, reproducing
+  its `value_to_float` so a corrected number stays comparable to the accuracy Inspect
+  reported.
+- **`--gold-file`.** Human labels can live in their own file and be joined to the
+  evaluation by identifier, which is where they actually live: the eval tool writes
+  verdicts, and somebody labels a subset in a spreadsheet afterwards. Requiring a hand
+  merge first was the step that stopped people getting as far as a number. The join
+  refuses rather than guessing when the key matches nothing, when an identifier repeats in
+  the evaluation, or when one example carries two human verdicts, and it reports labels
+  that landed nowhere instead of dropping them.
+- **`--judge` is now optional** when the format is recognized.
+- **`response_chars`** is derived from the response text for every supported format, so
+  the verbosity-bias regression runs on any eval output without adding a column.
+- **`doctor` opens eval-tool output**, and names the format it recognized.
+
+### Changed
+
+- Format detection requires two independent markers before claiming a file. One shared key
+  name is a coincidence, and claiming a hand-rolled JSONL would rename its columns out from
+  under whoever wrote it.
+- Normalization carries through keys it does not recognize, under their own names. A human
+  verdict pasted into an eval export is the most valuable column in the file, and dropping
+  it silently would have been the worst kind of bug this change could introduce.
+
 ## 0.6.0 - 2026-07-26
 
 ### Added

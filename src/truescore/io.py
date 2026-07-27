@@ -26,7 +26,7 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
-__all__ = ["LabelSet", "get_field", "load_labels", "read_rows"]
+__all__ = ["GoldJoin", "LabelSet", "get_field", "join_gold", "load_labels", "read_rows"]
 
 _TRUE_TOKENS = frozenset({"1", "true", "t", "yes", "y", "pass", "passed", "correct", "good"})
 _FALSE_TOKENS = frozenset({"0", "false", "f", "no", "n", "fail", "failed", "incorrect", "bad"})
@@ -243,6 +243,131 @@ def _require_column(rows: Sequence[dict[str, Any]], column: str) -> None:
     if get_field(rows[0], column) is _MISSING_SENTINEL:
         available = ", ".join(sorted(_available_paths(rows[0]))[:25]) or "(none)"
         raise ValueError(f"column {column!r} not found; available columns: {available}")
+
+
+@dataclass(frozen=True)
+class GoldJoin:
+    """Eval rows with human labels attached, and an account of what matched.
+
+    Attributes:
+        rows: The eval rows, each matched row carrying the gold column.
+        matched: Eval rows that received a human label.
+        unmatched_gold: Human labels whose identifier appears in no eval row. Reported
+            rather than dropped silently, because a label that does not land is either a
+            wrong join key or an expensive label thrown away.
+        gold_column: Name of the column the labels were written to.
+    """
+
+    rows: list[dict[str, Any]]
+    matched: int
+    unmatched_gold: int
+    gold_column: str
+
+    def summary(self) -> str:
+        """Human-readable account of the join."""
+        lines = [f"joined {self.matched} human labels onto {len(self.rows)} examples"]
+        if self.unmatched_gold:
+            lines.append(
+                f"  warning: {self.unmatched_gold} human labels matched no example and "
+                "were not used"
+            )
+        return "\n".join(lines)
+
+
+def join_gold(
+    rows: Sequence[Mapping[str, Any]],
+    gold_source: str | Path | Sequence[Mapping[str, Any]],
+    *,
+    on: str,
+    gold: str,
+    gold_on: str | None = None,
+    into: str = "gold",
+) -> GoldJoin:
+    """Attach human labels from a separate file to eval rows, matched by identifier.
+
+    Human labels almost never live in the file the eval tool wrote. The tool writes
+    verdicts; somebody labels a subset in a spreadsheet afterwards. This joins the two by
+    identifier so neither file has to be edited by hand.
+
+    Args:
+        rows: Eval rows, one per example.
+        gold_source: Path to a CSV or JSON Lines file of human labels, or rows in memory.
+        on: Identifier column in ``rows``.
+        gold: Column in ``gold_source`` holding the human verdict.
+        gold_on: Identifier column in ``gold_source``. Defaults to ``on``.
+        into: Column name to write the human verdict to on matched rows.
+
+    Returns:
+        A :class:`GoldJoin`. Rows that received no label simply lack the column, which
+        :func:`load_labels` reads as unlabeled.
+
+    Raises:
+        ValueError: If a column is absent, if an identifier repeats in either input, or if
+            no human label matches any example -- which means the join key is wrong, and
+            is worth failing on rather than reporting a corrected number from zero labels.
+
+    References:
+        tests/test_io.py::test_join_gold_attaches_labels_by_identifier
+        tests/test_io.py::test_join_gold_rejects_a_join_key_that_matches_nothing
+    """
+    eval_rows = [dict(row) for row in rows]
+    if not eval_rows:
+        raise ValueError("no eval rows to join onto")
+    _require_column(eval_rows, on)
+
+    if isinstance(gold_source, (str, Path)):
+        gold_rows: list[dict[str, Any]] = read_rows(gold_source)
+    else:
+        gold_rows = [dict(row) for row in gold_source]
+    if not gold_rows:
+        raise ValueError("the human-label file contains no rows")
+
+    key_column = gold_on or on
+    _require_column(gold_rows, key_column)
+    _require_column(gold_rows, gold)
+
+    positions: dict[str, int] = {}
+    for position, row in enumerate(eval_rows):
+        identifier = str(get_field(row, on))
+        if identifier in positions:
+            raise ValueError(
+                f"identifier {identifier!r} appears more than once in column {on!r}. "
+                "A human label would attach to every copy and be counted more than once; "
+                "pick a column that is unique per example."
+            )
+        positions[identifier] = position
+
+    seen: set[str] = set()
+    matched = 0
+    unmatched = 0
+    for number, row in enumerate(gold_rows, start=1):
+        identifier = str(get_field(row, key_column))
+        if identifier in seen:
+            raise ValueError(
+                f"identifier {identifier!r} appears more than once in the human-label file "
+                f"(row {number}). Two humans labeling one example is a real situation, but "
+                "it needs resolving into a single verdict before correction, or measuring "
+                "with truescore.agreement."
+            )
+        seen.add(identifier)
+        value = get_field(row, gold)
+        if _is_missing(value):
+            continue
+        target = positions.get(identifier)
+        if target is None:
+            unmatched += 1
+            continue
+        eval_rows[target][into] = value
+        matched += 1
+
+    if matched == 0:
+        sample = ", ".join(sorted(positions)[:3])
+        raise ValueError(
+            f"no human label matched any example: {unmatched} labels were read from "
+            f"{key_column!r} and none appears in {on!r}. Example identifiers look like: "
+            f"{sample}. Check that the two files identify examples the same way."
+        )
+    return GoldJoin(rows=eval_rows, matched=matched, unmatched_gold=unmatched, gold_column=into)
 
 
 def load_labels(
