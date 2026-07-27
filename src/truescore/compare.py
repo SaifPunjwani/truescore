@@ -230,8 +230,14 @@ def paired_bootstrap(
 
     low, high = np.percentile(resampled, [100 * alpha / 2, 100 * (1 - alpha / 2)])
     # Two-sided bootstrap p-value: twice the smaller tail mass on the far side of zero.
-    share_below = float(np.mean(resampled <= 0.0))
-    p_value = float(min(1.0, 2.0 * min(share_below, 1.0 - share_below)))
+    # Both tails count the mass sitting exactly at zero, which matters when the two systems
+    # agree on every example. Then every resample is exactly zero, and measuring one tail as
+    # the complement of the other would score that as p=0: perfect agreement reported as
+    # the strongest possible evidence of a difference. Counting both inclusively gives
+    # min(1, 2*1) = 1, which is the answer.
+    below = float(np.mean(resampled <= 0.0))
+    above = float(np.mean(resampled >= 0.0))
+    p_value = float(min(1.0, 2.0 * min(below, above)))
 
     return ComparisonResult(
         difference=float(diffs.mean()),

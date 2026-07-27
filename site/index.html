@@ -104,11 +104,31 @@ truescore doctor your_eval_results.csv</pre>
     <a class="btn primary" href="https://github.com/SaifPunjwani/truescore">GitHub</a>
     <a class="btn" href="https://pypi.org/project/truescore/">PyPI</a>
     <a class="btn" href="docs/methods/">Methods</a>
-    <a class="btn" href="findings/mt-bench.html">Findings</a>
+    <a class="btn" href="findings/judge-leaderboards.html">Findings</a>
   </div>
 </header>
 
 <h2>On real data</h2>
+
+<p>RewardBench ranks LLM judges by accuracy against human-verified answers on 2985
+preference pairs. The top two ranks are 0.37 points apart and not distinguishable, so the
+nine published ranks are really four tiers. The same two judges disagree on 10 of 23
+subsets, in both directions.</p>
+
+<table>
+  <tr><th>subset</th><th>Skywork-Critic-8B</th><th>gpt-4o-2024-08-06</th><th>gap</th></tr>
+  <tr><td>llmbar-adver-neighbor</td><td class="num">0.806</td><td class="num bad">0.582</td><td class="num">+0.224</td></tr>
+  <tr><td>math-prm</td><td class="num">0.915</td><td class="num">0.749</td><td class="num">+0.166</td></tr>
+  <tr><td>refusals-dangerous</td><td class="num">0.960</td><td class="num">0.850</td><td class="num">+0.110</td></tr>
+  <tr><td>hep-js (code)</td><td class="num">0.872</td><td class="num">0.994</td><td class="num">-0.122</td></tr>
+  <tr><td>hep-go (code)</td><td class="num">0.872</td><td class="num">0.988</td><td class="num">-0.116</td></tr>
+  <tr><td><strong>overall</strong></td><td class="num">0.8898</td><td class="num">0.8861</td><td class="num">not distinguishable</td></tr>
+</table>
+
+<p class="note">A tied headline number is not a tie. Holm-corrected across all 23 subsets.
+<a href="findings/judge-leaderboards.html">Full write-up</a>.</p>
+
+<h2>How far a judge moves a score</h2>
 
 <p>MT-Bench published GPT-4's pairwise judgments and human judgments over the same 1814
 comparisons. GPT-4 agrees with the humans 88% of the time, and still reports its own win
@@ -196,7 +216,7 @@ what the judge appears to be biased by:
 
 <h2>In CI</h2>
 
-<pre>- uses: SaifPunjwani/truescore@v0.7.3
+<pre>- uses: SaifPunjwani/truescore@v0.7.4
   with:
     command: drift
     args: anchor.csv --baseline judge_pinned --current judge_today --gold human</pre>
@@ -231,7 +251,7 @@ sequences are checked over whole trajectories.</p>
 result or raises. That pass found three defects before the first release, including a
 near-deterministic slice whose interval covered 7.7% of the time.</p>
 
-<p class="note">663 tests. mypy --strict. numpy and scipy are the only dependencies.
+<p class="note">666 tests. mypy --strict. numpy and scipy are the only dependencies.
 truescore never calls a model.</p>
 
 <footer>

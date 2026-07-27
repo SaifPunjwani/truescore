@@ -25,6 +25,12 @@ import markdown
 BASE = "https://saifpunjwani.github.io/truescore"
 
 STUDIES = {
+    "rewardbench": (
+        "judge-leaderboards",
+        "A judge leaderboard, with the error bars it is printed without",
+        "The top two judges on RewardBench are not distinguishable on 2985 paired "
+        "examples, and disagree on 10 of 23 subsets by up to 22 points.",
+    ),
     "mt_bench": (
         "mt-bench",
         "88% agreement, 13 points of error",

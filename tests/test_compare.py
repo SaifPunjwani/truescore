@@ -284,3 +284,45 @@ def test_cluster_bootstrap_reduces_to_the_row_bootstrap_on_singletons() -> None:
     assert singletons.difference == pytest.approx(rows.difference)
     assert singletons.low == pytest.approx(rows.low, abs=0.01)
     assert singletons.high == pytest.approx(rows.high, abs=0.01)
+
+
+def test_identical_systems_are_not_a_significant_difference() -> None:
+    """Two systems that agree on every example must not report p = 0.
+
+    Found by running the RewardBench study: on a subset where both judges scored 1.000,
+    every paired difference is zero, so every bootstrap resample is exactly zero. Measuring
+    one tail as the complement of the other put all that mass in one tail and returned
+    p=0.000 beside a gap of +0.000, which then survived a Holm correction and was reported
+    as a real difference. Both tails have to count the mass sitting at zero.
+    """
+    identical = np.ones(60)
+
+    result = paired_bootstrap(identical, identical, n_bootstrap=2000, seed=0)
+
+    assert result.difference == 0.0
+    assert result.p_value == 1.0
+    assert result.low == 0.0
+    assert result.high == 0.0
+
+
+def test_a_constant_offset_is_still_detected() -> None:
+    """The fix must not blunt the ordinary case it sits next to."""
+    a = np.ones(60)
+    b = np.zeros(60)
+
+    result = paired_bootstrap(a, b, n_bootstrap=2000, seed=0)
+
+    assert result.difference == 1.0
+    assert result.p_value < 0.05
+
+
+def test_mostly_tied_systems_report_an_honest_p_value() -> None:
+    """A handful of differences among many exact ties should not be overstated."""
+    rng = np.random.default_rng(5)
+    a = rng.random(400).round()
+    b = a.copy()
+    b[:3] = 1.0 - b[:3]  # three disagreements out of four hundred
+
+    result = paired_bootstrap(a, b, n_bootstrap=8000, seed=0)
+
+    assert result.p_value > 0.05

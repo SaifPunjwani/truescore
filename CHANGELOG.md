@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.7.4 - 2026-07-27
+
+### Fixed
+
+- **`paired_bootstrap` reported p = 0 when two systems agreed on every example.** The
+  two-sided p-value measured one tail as the complement of the other. When every paired
+  difference is exactly zero, every resample is exactly zero, and all of that mass landed
+  in one tail: perfect agreement came back as the strongest possible evidence of a
+  difference. Both tails now count the mass sitting at zero, so identical systems return
+  p = 1. Found by the RewardBench study, where a subset both judges scored 1.000 on
+  produced `p=0.000` beside a gap of `+0.000` and survived a Holm correction.
+
+### Added
+
+- **A second study, `analysis/rewardbench`.** RewardBench ranks LLM judges by accuracy
+  against human-verified answers on 2985 preference pairs, all judges scored on the same
+  examples. Four of the eight adjacent gaps do not survive a paired test with a Holm
+  correction, so nine published ranks are really four tiers. The top two are 0.37 points
+  apart and not distinguishable, and disagree on 10 of 23 subsets in both directions by up
+  to 22 points. Uses only truescore and the standard library.
+
 ## 0.7.3 - 2026-07-27
 
 ### Fixed

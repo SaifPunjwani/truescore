@@ -41,7 +41,8 @@ jobs:
           set -euo pipefail
           for page in docs/methods/index docs/methods/prediction-powered-inference \
                       docs/methods/confidence-sequences docs/methods/judge-bias-and-slices \
-                      docs/methods/contamination findings/mt-bench; do
+                      docs/methods/contamination findings/mt-bench \
+                      findings/judge-leaderboards; do
             test -s "_site/${page}.html" || {
               echo "missing or empty: ${page}.html"; exit 1; }
           done

@@ -184,7 +184,7 @@ print(report.summary())
 ### GitHub Actions
 
 ```yaml
-- uses: SaifPunjwani/truescore@v0.7.3
+- uses: SaifPunjwani/truescore@v0.7.4
   with:
     command: drift
     args: anchor.csv --baseline judge_pinned --current judge_today --gold human_passed
@@ -258,9 +258,16 @@ the implementation released with the papers it comes from. The point estimate ag
 unbiased variance and the test asserts it is never narrower rather than merely close.
 Writing that comparison found a real defect in how λ was chosen.
 
-663 tests, `mypy --strict`, CI on Linux and macOS across Python 3.10 and 3.13.
+666 tests, `mypy --strict`, CI on Linux and macOS across Python 3.10 and 3.13.
 
 ## Findings
+
+[A judge leaderboard, with the error bars it is printed without](analysis/rewardbench/FINDINGS.md).
+The top two judges on RewardBench are 0.37 points apart and not distinguishable on 2985
+paired examples, so the nine published ranks are really four tiers. The same two judges
+disagree on 10 of 23 subsets in both directions: `gpt-4o-2024-08-06` wins every code subset
+by 7 to 12 points, an 8B open critic model wins adversarial preference and maths by 11 to
+22. A tied headline number is not a tie.
 
 [88% agreement, 13 points of error](analysis/mt_bench/FINDINGS.md). MT-Bench published
 GPT-4's pairwise judgments and human judgments over the same 1814 comparisons. GPT-4 agrees

@@ -131,7 +131,10 @@ def main() -> int:
     print("\n2. Two explanations for that gap, fitted together")
     strength = leave_one_out_strength(data)
     spread = np.array(
-        [strength[a][i] - strength[b][i] for i, (a, b) in enumerate(zip(data.ma, data.mb))]
+        [
+            strength[a][i] - strength[b][i]
+            for i, (a, b) in enumerate(zip(data.ma, data.mb, strict=True))
+        ]
     )
     gpt4_side = np.array([a == "gpt-4" for a in data.ma], float) - np.array(
         [b == "gpt-4" for b in data.mb], float
@@ -150,11 +153,7 @@ def main() -> int:
 
     print("\n3. Judge quality against the human verdict, decisive comparisons only")
     binary = data[decisive]
-    print(
-        judge_agreement(
-            binary.judge.map(SCORE).values, binary.human.map(SCORE).values
-        ).summary()
-    )
+    print(judge_agreement(binary.judge.map(SCORE).values, binary.human.map(SCORE).values).summary())
 
     print("\n4. Recovering the human number from a fraction of the labels")
     judge, human = oriented(data, "gpt-4")
