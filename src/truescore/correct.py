@@ -284,14 +284,28 @@ def _optimal_lambda(
     ``λ* = Cov(Y, f) / (Var(f)(1 + n/N_u))``. Clipping to [0, 1] keeps the estimator
     between the classical estimate (λ=0) and vanilla PPI (λ=1); coverage holds for any
     fixed λ, and choosing λ from the same sample contributes only a higher-order term.
+
+    ``Var(f)`` is estimated over every judge label, labeled and unlabeled alike, rather
+    than over the labeled subset only. Judge labels exist for every example by
+    construction, so restricting the estimate to the labeled subset throws away most of
+    the data for no reason, and the resulting noise in λ is worst exactly where this
+    library is used: a few dozen human labels against thousands of examples.
+
+    Both conventions here are chosen to match the reference implementation exactly rather
+    than for their own sake: the covariance divides by ``n`` and the pooled variance by
+    ``N-1``. λ is a tuning parameter and not an estimand, so unbiasedness of either
+    estimate buys nothing, while agreeing to floating point with ``ppi_py`` removes a
+    whole class of question about which implementation to believe. Checked in
+    ``tests/test_conformance.py``, to 1e-12.
     """
     n = gold_values.shape[0]
     n_unlabeled = judge_unlabeled.shape[0]
-    var_f = float(np.var(judge_labeled, ddof=1))
+    all_judge = np.concatenate([judge_labeled, judge_unlabeled])
+    var_f = float(np.var(all_judge, ddof=1))
     if var_f <= 0.0:
         # A constant judge carries no information; fall back to the classical estimator.
         return 0.0
-    cov = float(np.cov(gold_values, judge_labeled, ddof=1)[0, 1])
+    cov = float(np.cov(gold_values, judge_labeled, ddof=0)[0, 1])
     lam = cov / (var_f * (1.0 + n / n_unlabeled))
     return float(np.clip(lam, 0.0, 1.0))
 

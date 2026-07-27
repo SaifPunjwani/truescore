@@ -104,6 +104,34 @@ use the estimated $\lambda$, so they test the estimator as it ships.
    Inspect adapter averages epochs to one row per sample before any of this, so the common
    case needs nothing from the caller. The docstring says so.
 
+## Agreement with the reference implementation
+
+`ppi_py` is the implementation released with the papers above. Two implementations written
+from the same algebra should return the same numbers, and `tests/test_conformance.py`
+checks that they do across six regimes, from 30 gold labels against 2000 unlabeled
+examples to a labeled set as large as the unlabeled one.
+
+Writing that test found a real defect. λ was being chosen with $\operatorname{Var}(f)$
+estimated over the labeled subset alone, which disagreed with the reference by 5.5e-2 on
+the point estimate at 50 gold labels, far too large to be arithmetic. The reference was
+right: judge labels exist for *every* example, so estimating $\operatorname{Var}(f)$ from
+the labeled subset throws away most of the available data and leaves λ noisy in exactly
+the regime this library targets. Pooling both sets fixed it.
+
+Two degrees-of-freedom conventions remained, and they are treated differently on purpose.
+
+The covariance inside λ now divides by $n$, matching the reference, and the point estimate
+agrees to 1e-12. λ is a tuning parameter rather than an estimand, so unbiasedness of that
+covariance buys nothing, while exact agreement removes a whole class of question about
+which implementation to believe.
+
+The variance inside the interval keeps $n-1$. That one *is* an estimand, the unbiased
+estimate is the conservative one, and coverage is the property this library will not
+trade. The interval therefore comes out 0.1% to 1.7% wider than the reference. The test
+asserts that direction rather than a tolerance: never narrower, and not gratuitously
+wider. A tolerance would have permitted a narrower interval, which is the one outcome that
+would matter.
+
 ## Rogan–Gladen, and when to prefer it
 
 For binary labels there is a classical alternative. If the judge has sensitivity

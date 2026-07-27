@@ -40,6 +40,15 @@ jobs:
             echo "--- $f"
             python "$f" > /dev/null
           done
+      - name: Conformance against the reference PPI implementation
+        # ppi-python pulls in numba, pandas and scikit-learn, and its numba pin does not
+        # build on 3.10, so this runs on the newest interpreter only. The test file skips
+        # itself when the package is absent, which is what the other matrix legs do.
+        if: matrix.python-version == '3.13' && matrix.os == 'ubuntu-latest'
+        run: |
+          pip install -e '.[conformance]'
+          pytest tests/test_conformance.py -q
+
       - name: CLI exit codes are meaningful
         run: |
           set +e

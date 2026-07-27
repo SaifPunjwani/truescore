@@ -184,7 +184,7 @@ print(report.summary())
 ### GitHub Actions
 
 ```yaml
-- uses: SaifPunjwani/truescore@v0.7.2
+- uses: SaifPunjwani/truescore@v0.7.3
   with:
     command: drift
     args: anchor.csv --baseline judge_pinned --current judge_today --gold human_passed
@@ -251,6 +251,12 @@ The suite fuzzes every public function against adversarial inputs under one rule
 input produces a finite result or raises `ValueError`, never a silent NaN. That pass found
 three defects before the first release, including a near-deterministic slice whose interval
 covered 7.7% of the time.
+
+The corrected estimate is checked against [`ppi_py`](https://github.com/aangelopoulos/ppi_py),
+the implementation released with the papers it comes from. The point estimate agrees to
+1e-12 across six regimes; the interval is 0.1% to 1.7% wider, because this package uses the
+unbiased variance and the test asserts it is never narrower rather than merely close.
+Writing that comparison found a real defect in how λ was chosen.
 
 663 tests, `mypy --strict`, CI on Linux and macOS across Python 3.10 and 3.13.
 

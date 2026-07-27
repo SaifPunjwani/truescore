@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.7.3 - 2026-07-27
+
+### Fixed
+
+- **λ was chosen from too little data.** The PPI tuning parameter estimated `Var(f)` over
+  the gold-labeled subset alone. Judge labels exist for every example, so that discarded
+  most of the available data and left λ noisy in exactly the regime this library is for: a
+  few dozen human labels against thousands of examples. Pooling both sets moved the point
+  estimate by up to 5.5e-2 at 50 gold labels. Coverage was never at risk, since validity
+  holds for any fixed λ, but the intervals were wider than they needed to be.
+
+### Added
+
+- **Conformance against the reference implementation.** `tests/test_conformance.py` checks
+  the corrected estimate against `ppi_py`, released with the papers this estimator comes
+  from, across six regimes. Writing it is what found the λ defect above. The point estimate
+  now agrees to 1e-12; the interval is asserted to be never narrower than the reference and
+  no more than 5% wider, which is a directional claim rather than a tolerance because a
+  tolerance would have permitted the one outcome that matters. Installed via the new
+  `conformance` extra, kept out of `dev` because it pulls in numba, pandas and
+  scikit-learn; the test skips itself when absent.
+- `Estimate.standard_error`, populated by `ppi_estimate`.
+
+### Changed
+
+- The covariance inside λ now divides by `n` rather than `n-1`, matching the reference
+  exactly. λ is a tuning parameter and not an estimand, so unbiasedness there buys nothing
+  while exact agreement removes a question about which implementation to believe. The
+  variance inside the *interval* keeps `n-1`, because that one is an estimand and the
+  unbiased estimate is the conservative one.
+- CONTRIBUTING records that mypy has to be run against Python 3.10 as well, since numpy's
+  stubs differ enough between the two matrix legs that it can pass on one and fail on the
+  other.
+
 ## 0.7.2 - 2026-07-27
 
 Completes the clustering work in 0.7.1, which fixed `audit` and left the other commands

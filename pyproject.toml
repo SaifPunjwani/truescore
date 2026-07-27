@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "truescore"
-version = "0.7.2"
+version = "0.7.3"
 description = "Statistically valid evaluation for LLM-judged benchmarks: bias-corrected scores, honest intervals, defensible comparisons"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -59,6 +59,16 @@ dev = [
     "ruff>=0.6",
     "mypy>=1.10",
     "scipy-stubs>=1.15",
+]
+# The reference PPI implementation, used only by tests/test_conformance.py to check that
+# this package returns the same numbers. Kept out of `dev` because it pulls in numba,
+# pandas, scikit-learn and gdown, and its numba pin refuses to build on Python 3.10.
+# tests/test_conformance.py skips itself when this is absent.
+conformance = [
+    "ppi-python>=0.2.3",
+    # ppi-python declares an unpinned numba, and numba 0.53's metadata does not advertise
+    # its Python ceiling, so a resolver reading only metadata picks it and the build fails.
+    "numba>=0.59",
 ]
 
 [tool.hatch.build.targets.wheel]

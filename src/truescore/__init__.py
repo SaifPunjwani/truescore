@@ -91,7 +91,7 @@ from truescore.weighting import (
     post_stratified_estimate,
 )
 
-__version__ = "0.7.2"
+__version__ = "0.7.3"
 
 __all__ = [
     "AgreementReport",
