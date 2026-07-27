@@ -106,6 +106,20 @@ buys here is the ability to use the judge at all without inheriting its bias.
 - **Ties are collapsed to 0.5**, and "tie (inconsistent)", MT-Bench's marker for a judge
   that disagreed with itself across presentation orders, is treated as a tie.
 
+## Prior work
+
+Self-preference in LLM judges is established, not new here. The MT-Bench paper itself
+(Zheng et al., "Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena", arXiv:2306.05685)
+names self-enhancement bias and reports GPT-4 favouring its own answers. Panickssery,
+Bowman and Feng ("LLM Evaluators Recognize and Favor Their Own Generations",
+arXiv:2404.13076) show evaluators recognise their own text and that the preference tracks
+that recognition.
+
+What is added here is a measurement rather than a mechanism: the size of the resulting
+error in a published win rate, an interval on it, a separation from the competing
+spread-exaggeration explanation, and the demonstration that a judge agreeing 88% of the
+time still moves a leaderboard number by 12.7 points.
+
 ## The general point
 
 An agreement rate is a property of a labeller. A leaderboard is a property of an aggregate.
