@@ -184,3 +184,45 @@ def test_doctor_profiles_nested_json_paths(tmp_path: Path) -> None:
     assert kinds["human"] == "sparse_verdict"
     # The suggested commands must carry the dotted path, or they won't run.
     assert any("--judge gradingResult.pass" in item for item in result.available)
+
+
+def test_doctor_recognises_a_rubric_score(tmp_path: Path) -> None:
+    """Teams grade on 1-5 at least as often as pass/fail, and the metrics differ."""
+    path = tmp_path / "rubric.csv"
+    rows = ["id,judge_score,human_score"]
+    for i in range(200):
+        gold = (i % 5) + 1
+        rows.append(f"q{i},{min(5, gold + (i % 2))},{gold if i % 4 == 0 else ''}")
+    path.write_text("\n".join(rows), encoding="utf-8")
+
+    result = diagnose(path)
+    kinds = {c.name: c.kind for c in result.columns}
+
+    assert kinds["judge_score"] == "graded"
+    assert kinds["human_score"] == "sparse_graded"
+    assert any("quadratic-weighted kappa" in item for item in result.available)
+
+
+def test_a_rubric_without_human_scores_says_what_is_blocked(tmp_path: Path) -> None:
+    path = tmp_path / "rubric_nogold.csv"
+    rows = ["id,judge_score"] + [f"q{i},{(i % 5) + 1}" for i in range(120)]
+    path.write_text("\n".join(rows), encoding="utf-8")
+
+    result = diagnose(path)
+    blocked = " ".join(f"{what}: {why}" for what, why in result.blocked)
+    assert "no human rubric scores" in blocked
+    assert "everything" not in blocked, "a rubric column is not nothing"
+
+
+def test_a_binary_column_is_still_a_verdict_not_a_rubric(tmp_path: Path) -> None:
+    """The graded heuristic must not swallow pass/fail columns."""
+    path = tmp_path / "binary.csv"
+    path.write_text("judge\n" + "\n".join(str(i % 2) for i in range(60)), encoding="utf-8")
+    assert {c.name: c.kind for c in diagnose(path).columns}["judge"] == "verdict"
+
+
+def test_a_wide_numeric_column_is_a_covariate_not_a_rubric(tmp_path: Path) -> None:
+    path = tmp_path / "tokens.csv"
+    rows = ["judge,tokens"] + [f"1,{100 + i}" for i in range(60)]
+    path.write_text("\n".join(rows), encoding="utf-8")
+    assert {c.name: c.kind for c in diagnose(path).columns}["tokens"] == "numeric"

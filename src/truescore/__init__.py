@@ -14,11 +14,14 @@ from __future__ import annotations
 
 from truescore.agreement import (
     AgreementReport,
+    GradedAgreementReport,
     Interval,
     cohen_kappa,
+    graded_agreement,
     gwet_ac1,
     judge_agreement,
     krippendorff_alpha,
+    quadratic_weighted_kappa,
     wilson_interval,
 )
 from truescore.bias import (
@@ -102,6 +105,7 @@ __all__ = [
     "Estimate",
     "EvalReport",
     "GoldBudget",
+    "GradedAgreementReport",
     "Interval",
     "PositionBiasResult",
     "SliceComparison",
@@ -124,6 +128,7 @@ __all__ = [
     "exchangeability_test",
     "first_exclusion",
     "gold_only_estimate",
+    "graded_agreement",
     "gwet_ac1",
     "holm",
     "judge_agreement",
@@ -141,6 +146,7 @@ __all__ = [
     "post_stratified_estimate",
     "ppi_compare",
     "ppi_estimate",
+    "quadratic_weighted_kappa",
     "required_gold_labels",
     "required_pairs",
     "rogan_gladen_estimate",

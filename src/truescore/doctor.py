@@ -47,7 +47,7 @@ class ColumnProfile:
     Attributes:
         name: Column name.
         kind: One of ``verdict``, ``sparse_verdict``, ``numeric``, ``categorical``,
-            ``identifier`` or ``unusable``.
+            ``graded``, ``sparse_graded``, ``identifier`` or ``unusable``.
         n_present: Rows carrying a value.
         n_missing: Rows where the value is blank.
         n_distinct: Distinct values observed.
@@ -161,6 +161,15 @@ def _classify(name: str, raw: list[Any]) -> ColumnProfile:
             kind = "sparse_verdict" if n_missing else "verdict"
             return profile(kind, "0/1 values")
         low, high = min(numeric), max(numeric)
+        # A handful of small whole numbers is a rubric score, not a covariate. Teams grade
+        # on 1-5 at least as often as pass/fail, and the graded metrics differ.
+        whole = all(float(v).is_integer() for v in numeric)
+        if whole and 2 < len(distinct) <= 10 and low >= 0 and high <= 10:
+            kind = "sparse_graded" if n_missing else "graded"
+            return profile(
+                kind,
+                f"{len(distinct)} levels from {low:g} to {high:g} -- looks like a rubric score",
+            )
         return profile("numeric", f"range {low:g} to {high:g} -- usable as a bias covariate")
 
     # Near-uniqueness, by ratio rather than an absolute count, so a six-row sample is
@@ -247,6 +256,8 @@ def diagnose(path: str | Path, *, alpha: float = 0.05) -> Diagnosis:
 
     judges = tuple(c.name for c in columns if c.kind == "verdict")
     golds = tuple(c.name for c in columns if c.kind == "sparse_verdict")
+    graded = tuple(c.name for c in columns if c.kind == "graded")
+    graded_gold = tuple(c.name for c in columns if c.kind == "sparse_graded")
     numerics = tuple(c.name for c in columns if c.kind == "numeric")
     categoricals = tuple(c.name for c in columns if c.kind == "categorical")
 
@@ -267,8 +278,8 @@ def diagnose(path: str | Path, *, alpha: float = 0.05) -> Diagnosis:
                 f"compare {judges[0]} against {judges[1]} as judged "
                 f"(truescore compare {stem} --judge-a {judges[0]} --judge-b {judges[1]})"
             )
-    else:
-        blocked.append(("everything", "no column looks like a judge verdict"))
+    elif not graded:
+        blocked.append(("everything", "no column looks like a judge verdict or a rubric score"))
 
     if judges and golds:
         judge_values = _to_binary([get_field(row, judges[0]) for row in rows])
@@ -333,6 +344,26 @@ def diagnose(path: str | Path, *, alpha: float = 0.05) -> Diagnosis:
             "is human labels rather than a second system, pass it as --gold: nothing in "
             "the data distinguishes them"
         )
+
+    if graded:
+        if graded_gold:
+            available.append(
+                f"correct the mean {graded[0]} rating against {graded_gold[0]} "
+                "(truescore.correct.ppi_estimate) and measure judge quality with "
+                "quadratic-weighted kappa (truescore.agreement.graded_agreement)"
+            )
+        else:
+            blocked.append(
+                (
+                    f"correcting the mean {graded[0]} rating and measuring judge quality",
+                    "no human rubric scores. Label a random sample of the same rating "
+                    "scale to unblock both",
+                )
+            )
+            recommendations.append(
+                f"{graded[0]} is a rubric score; label a random sample on the same scale "
+                "to correct the mean rating and measure quadratic-weighted kappa"
+            )
 
     if judges and not categoricals:
         recommendations.append(

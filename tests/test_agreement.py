@@ -8,9 +8,11 @@ import pytest
 from tests.simulate import coverage_bounds
 from truescore.agreement import (
     cohen_kappa,
+    graded_agreement,
     gwet_ac1,
     judge_agreement,
     krippendorff_alpha,
+    quadratic_weighted_kappa,
     wilson_interval,
 )
 
@@ -151,3 +153,66 @@ def test_judge_agreement_summary_is_readable() -> None:
 def test_binary_validation_rejects_non_binary_labels() -> None:
     with pytest.raises(ValueError, match="only 0 and 1"):
         judge_agreement(np.array([0, 1, 2]), np.array([0, 1, 1]))
+
+
+def test_quadratic_kappa_matches_hand_computed_case() -> None:
+    """A 3x3 confusion matrix worked out by hand.
+
+    16 pairs over levels {1,2,3}: 12 agreements on the diagonal, 2 off-by-one at (1,2) and
+    2 at (2,3). Building the observed and expected matrices and applying
+    w_ij = (i-j)^2/(k-1)^2 gives kappa = 0.804878.
+    """
+    judge = np.array([1] * 4 + [2] * 4 + [3] * 4 + [1] * 2 + [2] * 2)
+    gold = np.array([1] * 4 + [2] * 4 + [3] * 4 + [2] * 2 + [3] * 2)
+    assert quadratic_weighted_kappa(judge, gold) == pytest.approx(0.804878, abs=1e-6)
+
+
+def test_quadratic_kappa_punishes_distant_disagreements() -> None:
+    """The reason to weight at all: a 1-vs-5 must cost more than a 3-vs-4.
+
+    Both judges below disagree on every example and share the same marginals, so
+    unweighted kappa cannot tell them apart. The quadratic weighting can.
+    """
+    gold = np.array([1, 2, 3, 4, 5] * 20)
+    near = np.array([2, 3, 4, 5, 1] * 20)
+    far = np.array([5, 4, 3, 2, 1] * 20)
+    assert quadratic_weighted_kappa(near, gold) > quadratic_weighted_kappa(far, gold)
+
+
+def test_quadratic_kappa_is_one_for_perfect_agreement() -> None:
+    scores = np.array([1, 3, 5, 2, 4, 1, 5])
+    assert quadratic_weighted_kappa(scores, scores) == pytest.approx(1.0)
+
+
+def test_quadratic_kappa_handles_a_single_observed_level() -> None:
+    """No chance disagreement is possible, so agreement is total rather than undefined."""
+    assert quadratic_weighted_kappa(np.array([3, 3, 3]), np.array([3, 3, 3])) == 1.0
+
+
+def test_graded_agreement_on_a_rubric() -> None:
+    """A judge grading about half a level high on a 1-5 rubric."""
+    rng = np.random.default_rng(0)
+    gold = rng.integers(1, 6, 600)
+    judge = np.clip(np.round(gold + 0.6 + rng.normal(0, 0.8, 600)), 1, 5)
+
+    report = graded_agreement(judge, gold)
+
+    assert report.n == 600
+    assert report.mean_error > 0.3, "the judge grades high, and the report should say so"
+    assert report.exact_match < report.within_one
+    assert 0.7 < report.quadratic_kappa < 1.0
+    assert report.spearman > 0.7
+    assert "grades high" in report.summary()
+
+
+def test_graded_agreement_reports_perfect_agreement_cleanly() -> None:
+    scores = np.array([1, 2, 3, 4, 5] * 10)
+    report = graded_agreement(scores, scores)
+    assert report.exact_match == 1.0
+    assert report.mean_absolute_error == 0.0
+    assert report.quadratic_kappa == pytest.approx(1.0)
+
+
+def test_graded_agreement_rejects_mismatched_lengths() -> None:
+    with pytest.raises(ValueError, match="same length"):
+        graded_agreement(np.array([1, 2, 3]), np.array([1, 2]))

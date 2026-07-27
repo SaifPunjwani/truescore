@@ -143,7 +143,7 @@ Set `fail-on-finding: false` to report without blocking.
 | --- | --- |
 | `doctor` | What can this file support? Profiles columns, lists runnable commands, says what's blocked and how many labels would unblock it, scans numeric columns for judge bias. |
 | `correct` | What's the true score? Prediction-powered inference, Rogan–Gladen correction. |
-| `agreement` | How good is the judge? Accuracy, sensitivity, specificity, Cohen's κ, Gwet's AC1, Krippendorff's α, all with intervals. |
+| `agreement` | How good is the judge? Accuracy, sensitivity, specificity, Cohen's κ, Gwet's AC1, Krippendorff's α, all with intervals. Graded rubrics get quadratic-weighted kappa. |
 | `bias` | What's the judge biased by? HC3 regression on length, self-preference, formatting. Position-bias test for pairwise judges. |
 | `compare` | Is A better than B? McNemar (mid-p), paired bootstrap, permutation, PPI-corrected comparison, Holm and BH. |
 | `slices` | Better for whom? Per-segment correction with multiplicity control. |
@@ -195,7 +195,7 @@ nothing ever returns a NaN. Any input either gives a finite result or raises `Va
 That found three real bugs before release, including one where a near-deterministic slice
 got an interval with 7.7% coverage.
 
-611 tests. `mypy --strict`. numpy and scipy are the only dependencies.
+622 tests. `mypy --strict`. numpy and scipy are the only dependencies.
 
 Derivations, assumptions, and known limits are in [`docs/methods/`](docs/methods/).
 

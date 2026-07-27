@@ -40,11 +40,14 @@ from truescore._validation import (
 
 __all__ = [
     "AgreementReport",
+    "GradedAgreementReport",
     "Interval",
     "cohen_kappa",
+    "graded_agreement",
     "gwet_ac1",
     "judge_agreement",
     "krippendorff_alpha",
+    "quadratic_weighted_kappa",
     "wilson_interval",
 ]
 
@@ -428,4 +431,164 @@ def judge_agreement(
             ac1s, gwet_ac1(judge_arr, gold_arr), alpha, "bootstrap-percentile"
         ),
         gold_prevalence=n_pos / n,
+    )
+
+
+@dataclass(frozen=True)
+class GradedAgreementReport:
+    """Judge-versus-gold agreement for graded scores such as a 1-5 rubric.
+
+    Attributes:
+        n: Examples carrying both a judge and a gold score.
+        categories: The distinct score levels observed, in order.
+        exact_match: Fraction where the two scores are identical.
+        within_one: Fraction where they differ by at most one level. Usually the number a
+            rubric owner actually cares about, since adjacent levels are the ones humans
+            disagree on too.
+        quadratic_kappa: Quadratic-weighted kappa, the standard chance-corrected measure
+            for ordinal ratings. Disagreements are penalised by the square of the distance,
+            so a 1-vs-5 counts far worse than a 3-vs-4.
+        krippendorff_ordinal: Krippendorff's alpha with the ordinal difference metric.
+        mean_error: Mean signed difference, judge minus gold. Positive means the judge
+            grades high.
+        mean_absolute_error: Mean absolute difference, in score levels.
+        spearman: Rank correlation between the two score sets.
+    """
+
+    n: int
+    categories: tuple[float, ...]
+    exact_match: float
+    within_one: float
+    quadratic_kappa: float
+    krippendorff_ordinal: float
+    mean_error: float
+    mean_absolute_error: float
+    spearman: float
+
+    def summary(self) -> str:
+        """Human-readable multi-line summary."""
+        direction = "grades high" if self.mean_error > 0 else "grades low"
+        return "\n".join(
+            [
+                f"graded agreement on n={self.n} examples, "
+                f"levels {min(self.categories):g}-{max(self.categories):g}",
+                f"  exact match      {self.exact_match:.4f}",
+                f"  within one level {self.within_one:.4f}",
+                f"  quadratic kappa  {self.quadratic_kappa:.4f}",
+                f"  Krippendorff a   {self.krippendorff_ordinal:.4f}",
+                f"  spearman         {self.spearman:.4f}",
+                f"  mean error       {self.mean_error:+.4f} ({direction}), "
+                f"absolute {self.mean_absolute_error:.4f} levels",
+            ]
+        )
+
+
+def quadratic_weighted_kappa(judge: npt.ArrayLike, gold: npt.ArrayLike) -> float:
+    """Quadratic-weighted kappa between two sets of ordinal ratings.
+
+    The standard chance-corrected agreement measure when scores are ordered. Unweighted
+    kappa treats a 1-vs-5 disagreement the same as a 3-vs-4, which for a rubric is wrong.
+    Quadratic weights penalise by squared distance:
+
+    ``kappa = 1 - sum(w * O) / sum(w * E)``, with ``w_ij = (i - j)^2 / (k - 1)^2``,
+    ``O`` the observed confusion matrix and ``E`` the matrix expected from the marginals.
+
+    Args:
+        judge: Judge scores.
+        gold: Gold scores, aligned elementwise.
+
+    Returns:
+        Kappa, where 1 is perfect agreement, 0 is chance and negative is worse than chance.
+        Returns 1.0 when only one score level appears in both sets, where agreement is
+        perfect and no chance disagreement is possible.
+
+    Raises:
+        ValueError: If the inputs differ in length or are empty.
+
+    References:
+        tests/test_agreement.py::test_quadratic_kappa_matches_hand_computed_case
+        tests/test_agreement.py::test_quadratic_kappa_punishes_distant_disagreements
+    """
+    judge_arr = to_1d_array("judge", np.asarray(judge, dtype=float))
+    gold_arr = to_1d_array("gold", np.asarray(gold, dtype=float))
+    check_same_length("judge", judge_arr, "gold", gold_arr)
+
+    categories = np.unique(np.concatenate([judge_arr, gold_arr]))
+    k = categories.size
+    if k < 2:
+        return 1.0
+
+    index = {float(value): i for i, value in enumerate(categories)}
+    observed = np.zeros((k, k), dtype=float)
+    for j, g in zip(judge_arr, gold_arr, strict=True):
+        observed[index[float(j)], index[float(g)]] += 1.0
+    observed /= observed.sum()
+
+    judge_marginal = observed.sum(axis=1)
+    gold_marginal = observed.sum(axis=0)
+    expected = np.outer(judge_marginal, gold_marginal)
+
+    grid = np.arange(k, dtype=float)
+    weights = (grid[:, None] - grid[None, :]) ** 2 / (k - 1) ** 2
+
+    denominator = float((weights * expected).sum())
+    if np.isclose(denominator, 0.0):
+        # No chance disagreement is possible, so any observed agreement is total.
+        return 1.0
+    return float(1.0 - (weights * observed).sum() / denominator)
+
+
+def graded_agreement(
+    judge: npt.ArrayLike, gold: npt.ArrayLike, *, tolerance: float = 1.0
+) -> GradedAgreementReport:
+    """Measure a graded judge against gold scores on the same examples.
+
+    Use this instead of :func:`judge_agreement` when the judge emits a rubric score rather
+    than pass/fail. Binary metrics do not transfer: sensitivity and specificity are
+    undefined, and unweighted agreement throws away the ordering that makes a 4-vs-5
+    disagreement different from a 1-vs-5.
+
+    Args:
+        judge: Judge scores.
+        gold: Gold scores, aligned elementwise.
+        tolerance: How far apart two scores may be and still count toward ``within_one``.
+
+    Returns:
+        A :class:`GradedAgreementReport`.
+
+    Raises:
+        ValueError: If inputs differ in length or are empty.
+
+    References:
+        tests/test_agreement.py::test_graded_agreement_on_a_rubric
+    """
+    judge_arr = to_1d_array("judge", np.asarray(judge, dtype=float))
+    gold_arr = to_1d_array("gold", np.asarray(gold, dtype=float))
+    check_same_length("judge", judge_arr, "gold", gold_arr)
+
+    difference = judge_arr - gold_arr
+    categories = tuple(float(v) for v in np.unique(np.concatenate([judge_arr, gold_arr])))
+
+    ratings = np.vstack([judge_arr, gold_arr])
+    try:
+        alpha = krippendorff_alpha(ratings, level="ordinal")
+    except ValueError:
+        alpha = float("nan")
+
+    if np.std(judge_arr) == 0 or np.std(gold_arr) == 0:
+        # Rank correlation is undefined when one side is constant.
+        rho = float("nan")
+    else:
+        rho = float(stats.spearmanr(judge_arr, gold_arr).statistic)
+
+    return GradedAgreementReport(
+        n=int(judge_arr.shape[0]),
+        categories=categories,
+        exact_match=float(np.mean(difference == 0.0)),
+        within_one=float(np.mean(np.abs(difference) <= tolerance)),
+        quadratic_kappa=quadratic_weighted_kappa(judge_arr, gold_arr),
+        krippendorff_ordinal=alpha,
+        mean_error=float(difference.mean()),
+        mean_absolute_error=float(np.abs(difference).mean()),
+        spearman=rho,
     )
