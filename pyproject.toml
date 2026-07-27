@@ -15,9 +15,15 @@ keywords = [
     "evaluation",
     "llm",
     "llm-as-judge",
+    "llm-evaluation",
     "statistics",
     "prediction-powered-inference",
     "confidence-intervals",
+    "judge-bias",
+    "promptfoo",
+    "inspect-ai",
+    "deepeval",
+    "lm-evaluation-harness",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
