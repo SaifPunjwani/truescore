@@ -1,0 +1,75 @@
+cff-version: 1.2.0
+title: "truescore: statistics for LLM-judged evaluations"
+message: "If you use truescore in work you publish, please cite it."
+type: software
+authors:
+  - family-names: Punjwani
+    given-names: Saif
+repository-code: "https://github.com/SaifPunjwani/truescore"
+url: "https://saifpunjwani.github.io/truescore/"
+abstract: >-
+  truescore corrects evaluation scores produced by an LLM judge for that judge's own error,
+  using a small set of human labels. It implements prediction-powered inference, the
+  Rogan-Gladen correction, confidence sequences valid under repeated inspection,
+  HC3-robust judge-bias regression, per-segment correction with multiplicity control, and
+  an exact permutation test for benchmark contamination. Interval coverage is verified by
+  simulation rather than asserted.
+keywords:
+  - evaluation
+  - llm-as-a-judge
+  - prediction-powered inference
+  - confidence sequences
+  - statistics
+license: Apache-2.0
+version: 0.7.0
+date-released: "2026-07-27"
+references:
+  - type: article
+    title: "Prediction-powered inference"
+    authors:
+      - family-names: Angelopoulos
+        given-names: "Anastasios N."
+      - family-names: Bates
+        given-names: Stephen
+      - family-names: Fannjiang
+        given-names: Clara
+      - family-names: Jordan
+        given-names: "Michael I."
+      - family-names: Zrnic
+        given-names: Tijana
+    journal: Science
+    volume: 382
+    issue: 6671
+    year: 2023
+    doi: 10.1126/science.adi6000
+  - type: article
+    title: "Time-uniform, nonparametric, nonasymptotic confidence sequences"
+    authors:
+      - family-names: Howard
+        given-names: "Steven R."
+      - family-names: Ramdas
+        given-names: Aaditya
+      - family-names: McAuliffe
+        given-names: Jon
+      - family-names: Sekhon
+        given-names: Jasjeet
+    journal: "Annals of Statistics"
+    volume: 49
+    issue: 2
+    year: 2021
+    doi: 10.1214/20-AOS1991
+  - type: article
+    title: "Proving Test Set Contamination in Black-Box Language Models"
+    authors:
+      - family-names: Oren
+        given-names: Yonatan
+      - family-names: Meister
+        given-names: Nicole
+      - family-names: Chatterji
+        given-names: Niladri
+      - family-names: Ladhak
+        given-names: Faisal
+      - family-names: Hashimoto
+        given-names: "Tatsunori B."
+    year: 2023
+    url: "https://arxiv.org/abs/2310.17623"

@@ -23,13 +23,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - name: Assemble the site
         run: |
+          set -euo pipefail
+          python -m pip install --quiet markdown
           mkdir -p _site
           cp site/index.html _site/index.html
-          # Ship the method docs alongside the landing page so links from it resolve.
-          mkdir -p _site/docs
-          cp -r docs/methods _site/docs/methods
+          cp site/robots.txt site/sitemap.xml _site/
+          # The method docs carry the derivations. Served as raw markdown they are
+          # unreadable in a browser and invisible to search, so they are rendered.
+          python site/build.py _site
+      - name: Check every rendered page came out
+        run: |
+          set -euo pipefail
+          for page in index prediction-powered-inference confidence-sequences \
+                      judge-bias-and-slices contamination; do
+            test -s "_site/docs/methods/${page}.html" || {
+              echo "missing or empty: ${page}.html"; exit 1; }
+          done
+          # A link left pointing at .md would 404 for every reader who followed it.
+          ! grep -rq 'href="[^"]*\.md"' _site/docs/methods/ || {
+            echo "a markdown link survived rendering"; exit 1; }
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
