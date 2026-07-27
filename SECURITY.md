@@ -2,9 +2,9 @@
 
 ## Scope
 
-truescore reads local files, computes statistics, and writes reports. It makes no network
-calls, executes nothing from its input, and holds no credentials. Dependencies are numpy
-and scipy.
+truescore reads local files, computes statistics and writes reports. It makes no network
+calls and holds no credentials, and it executes nothing from its input. The dependencies
+are numpy and scipy.
 
 The realistic risk surface is parsing untrusted CSV or JSON Lines. Generated reports are
 plain text and are not escaped for HTML, so treat a report as untrusted input if you
@@ -13,11 +13,11 @@ render it in a browser.
 ## Reporting
 
 Open a [security advisory](https://github.com/SaifPunjwani/truescore/security/advisories/new)
-rather than a public issue.
+instead of a public issue.
 
 ## Statistical bugs
 
-An interval that doesn't cover at its nominal rate isn't a security issue, but it's the
+An interval that doesn't cover at its nominal rate isn't a security issue. It is still the
 most serious kind of bug this project can have. File those as regular issues with a
 reproduction and they'll be prioritised.
 

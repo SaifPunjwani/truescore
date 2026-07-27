@@ -2,7 +2,7 @@
 
 The methods behind `truescore.bias` and `truescore.slices`.
 
-## Bias is structure, not noise
+## Where judge error lands
 
 An agreement rate of 88% is fine if the 12% is scattered at random. It is dangerous if the
 12% is concentrated somewhere, because then a change that moves examples *into* that region
@@ -20,14 +20,13 @@ $$\widehat{\operatorname{Var}}(\hat\beta) = (X^\top X)^{-1}\left(\sum_i \frac{\h
 
 The vectorized implementation is cross-checked against an explicit loop written from that
 definition in
-`tests/test_bias.py::test_hc3_standard_errors_match_an_independent_implementation` — two
-code paths, one formula, so agreement is evidence about the algebra rather than about a
-shared shortcut.
+`tests/test_bias.py::test_hc3_standard_errors_match_an_independent_implementation`. The two
+implementations are independent, so agreement between them is evidence about the algebra.
 
 **Collinear designs raise.** A constant or duplicated covariate has no separately
-identifiable effect, and a pseudo-inverse would happily return a meaningless coefficient for
-it. `_hc3_regression` checks the rank first and refuses. This was found by a test that
-expected a raise and did not get one.
+identifiable effect, and a pseudo-inverse would return a meaningless coefficient for it.
+`_hc3_regression` checks the rank first and refuses. This was found by a test that expected
+a raise and did not get one.
 
 ## Position bias
 
@@ -43,12 +42,12 @@ against $\tfrac12$. Both ends are pinned by tests:
 
 ## Why one global correction is not enough
 
-Here is the argument for `truescore.slices` in one line: **the judge's bias is not constant
-across segments, so a single global correction reorders them.**
+The judge's bias is not constant across segments, so a single global correction reorders
+them. That is the argument for `truescore.slices`.
 
-Concretely, from the sample data in `examples/data/support_segments.csv`. A support
-assistant is evaluated across three segments. The new version writes longer answers on the
-technical segment than elsewhere, and the judge rewards length:
+The sample data in `examples/data/support_segments.csv` shows it. A support assistant is
+evaluated across three segments. The new version writes longer answers on the technical
+segment than elsewhere, and the judge rewards length:
 
 | segment | true change | as judged |
 | --- | --- | --- |
@@ -56,18 +55,17 @@ technical segment than elsewhere, and the judge rewards length:
 | account | +0.1522 | +0.1106 |
 | technical | **−0.1663** | **+0.1525** |
 
-On the technical segment the judge does not merely understate the change. It reports a
-fifteen-point improvement where there is a seventeen-point regression: the *sign is
-inverted*. A global correction estimated across all segments would subtract roughly the same
-amount everywhere and leave the ordering intact, so the regression would survive the
-correction untouched. Correcting each segment separately recovers −0.1659, against a planted
-truth of −0.1663.
+On the technical segment the judge inverts the sign of the change. It reports a fifteen-point
+improvement where there is a seventeen-point regression. A global correction
+estimated across all segments would subtract roughly the same amount everywhere and leave
+the ordering intact, so the regression would survive the correction untouched. Correcting
+each segment separately recovers −0.1659, against a planted truth of −0.1663.
 
 ## Multiplicity
 
 Slicing invites a second error. Twenty segments tested at $\alpha = 0.05$ produce, on
-average, one spurious "significant" segment per run even when nothing differs anywhere — and
-that segment then gets investigated, and a story gets constructed for it.
+average, one spurious "significant" segment per run even when nothing differs anywhere. That
+segment then gets investigated, and a story gets constructed for it.
 
 `compare_slices` applies a correction across the segments tested in one call:
 
@@ -79,20 +77,21 @@ that segment then gets investigated, and a story gets constructed for it.
 
 `tests/test_slices.py::test_multiplicity_correction_suppresses_spurious_slices` runs 120
 replications of twenty null segments and confirms the corrected flag rate stays low while
-the unadjusted rate does not — the correction is justified by measurement, not by citation.
+the unadjusted rate does not.
 
 ## Thin segments
 
-Gold labels spread thin. A segment holding eight human labels cannot support a corrected
-estimate, and the honest output is to say so. Below `min_gold` (default 20), `slices`
-reports the judge's number, marks the segment as not corrected, and gives the reason;
-`test_thin_slices_are_reported_not_estimated` pins that behavior. A confident number built
-on eight labels is worse than an admission, because only one of the two gets questioned.
+Gold labels spread thin across segments. A segment holding eight human labels cannot support
+a corrected estimate. Below `min_gold` (default 20), `slices` reports the judge's number,
+marks the segment as not corrected, and gives the reason;
+`test_thin_slices_are_reported_not_estimated` pins that behavior. Reporting the judge's
+number with the reason attached is preferable to publishing a corrected number that eight
+labels cannot support.
 
 ## References
 
 - MacKinnon & White (1985), "Some heteroskedasticity-consistent covariance matrix estimators
   with improved finite sample properties".
 - Zheng et al. (2023), "Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena",
-  arXiv:2306.05685 — position and verbosity bias in LLM judges.
+  arXiv:2306.05685. Position and verbosity bias in LLM judges.
 - Holm (1979); Benjamini & Hochberg (1995).
